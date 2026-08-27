@@ -1,0 +1,201 @@
+{
+  "task": "P5.4 (partial: HF heuristic + HF confidence-threshold(static) baselines done; BanditSpec cloned+inspected, unrunnable locally -> cloud stage)",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "transformers_version": "5.16.1",
+  "sklearn_available": false,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "temperature": 1.0,
+  "max_new_tokens": 48,
+  "n_prompts": 8,
+  "aligned_sampling_both_models": {
+    "do_sample": true,
+    "temperature": 1.0,
+    "top_k": 0,
+    "top_p": 1.0,
+    "repetition_penalty": 1.0
+  },
+  "api_note": "transformers 5.16.1: assisted-gen params (num_assistant_tokens, num_assistant_tokens_schedule, assistant_confidence_threshold) are read from draft.generation_config, NOT from target.generate() kwargs -- passing them to generate() is silently ignored.",
+  "hf_5_16_1_assisted_defaults": {
+    "num_assistant_tokens": 20,
+    "num_assistant_tokens_schedule": "constant",
+    "assistant_confidence_threshold": 0.4,
+    "assistant_lookbehind": 10
+  },
+  "confidence_threshold_note": "scikit-learn absent -> assistant_confidence_threshold used STATICALLY at 0.4 (ConfidenceCriteria early-stop); the online ROC-curve retuning (Intel/HF Dynamic Speculation Lookahead) is gated on is_sklearn_available() and did NOT run. Installing scikit-learn would enable it.",
+  "primary_metric": "tokens produced per target forward pass (hardware-independent)",
+  "primary_metric_caveat": "pitfall 14: this metric has no draft-cost term, so a schedule that uses larger assistant windows (HF 'heuristic', up to 10-15 here) scores higher by spending more draft forwards per round -- the trade the metric omits. Rank by tokens-per-target-forward is NOT a rank by tokens-per-compute-unit.",
+  "wall_clock_caveat": "HF assisted generation uses a KV cache; our speculative_generate / gammatune_generate do not. Wall-clock is not comparable.",
+  "alpha_note": "ours = EXACT. HF = ESTIMATED from wrapped-forward counts. Dev sanity check with fully-aligned sampling: HF constant-g3 2.89 tok/tf / alpha 0.77 vs ours 2.93 / 0.80 -- agree, so our rejection sampler matches HF's.",
+  "per_config": [
+    {
+      "config": "hf_constant_g3",
+      "assist_params": {
+        "num_assistant_tokens": 3,
+        "num_assistant_tokens_schedule": "constant",
+        "assistant_confidence_threshold": null
+      },
+      "tokens_per_target_forward_mean": 2.773227134063047,
+      "tokens_per_target_forward_std": 0.1711252239574535,
+      "alpha_estimated_mean": 0.7711158958008708,
+      "alpha_estimated_std": 0.05186200875836975,
+      "alpha_is": "ESTIMATED: (new_tokens - rounds) / assistant_forward_calls",
+      "wall_s_mean_CAVEAT": 14.402421582955867,
+      "total_new_tokens_per_seed": [
+        344,
+        348,
+        351
+      ],
+      "per_seed_tokens_per_target_forward": [
+        2.8923903238144724,
+        2.5312288073123987,
+        2.896062271062271
+      ]
+    },
+    {
+      "config": "hf_constant_g5",
+      "assist_params": {
+        "num_assistant_tokens": 5,
+        "num_assistant_tokens_schedule": "constant",
+        "assistant_confidence_threshold": null
+      },
+      "tokens_per_target_forward_mean": 3.0412689147125143,
+      "tokens_per_target_forward_std": 0.14506791862700494,
+      "alpha_estimated_mean": 0.7160697615024466,
+      "alpha_estimated_std": 0.027580661014212336,
+      "alpha_is": "ESTIMATED: (new_tokens - rounds) / assistant_forward_calls",
+      "wall_s_mean_CAVEAT": 14.723051458674794,
+      "total_new_tokens_per_seed": [
+        323,
+        359,
+        357
+      ],
+      "per_seed_tokens_per_target_forward": [
+        3.17694099378882,
+        2.84015922158337,
+        3.1067065287653524
+      ]
+    },
+    {
+      "config": "hf_heuristic",
+      "assist_params": {
+        "num_assistant_tokens": 5,
+        "num_assistant_tokens_schedule": "heuristic",
+        "assistant_confidence_threshold": null
+      },
+      "tokens_per_target_forward_mean": 4.9565621410889955,
+      "tokens_per_target_forward_std": 0.7967725389909869,
+      "alpha_estimated_mean": 0.6902537135412535,
+      "alpha_estimated_std": 0.032422224630912155,
+      "alpha_is": "ESTIMATED: (new_tokens - rounds) / assistant_forward_calls",
+      "wall_s_mean_CAVEAT": 15.04901523659161,
+      "total_new_tokens_per_seed": [
+        340,
+        359,
+        356
+      ],
+      "per_seed_tokens_per_target_forward": [
+        5.946006650354477,
+        4.928765352294764,
+        3.9949144206177456
+      ]
+    },
+    {
+      "config": "hf_confidence_0.4_static",
+      "assist_params": {
+        "num_assistant_tokens": 10,
+        "num_assistant_tokens_schedule": "constant",
+        "assistant_confidence_threshold": 0.4
+      },
+      "tokens_per_target_forward_mean": 3.782059127762453,
+      "tokens_per_target_forward_std": 0.17150338635951806,
+      "alpha_estimated_mean": 0.7078082938181711,
+      "alpha_estimated_std": 0.03408879805391439,
+      "alpha_is": "ESTIMATED: (new_tokens - rounds) / assistant_forward_calls",
+      "wall_s_mean_CAVEAT": 15.215563902864233,
+      "total_new_tokens_per_seed": [
+        359,
+        359,
+        356
+      ],
+      "per_seed_tokens_per_target_forward": [
+        3.84455643390426,
+        3.9537653522947642,
+        3.5478555970883336
+      ]
+    },
+    {
+      "config": "ours_fixed_gamma_1",
+      "tokens_per_target_forward_mean": 1.7681240610990443,
+      "tokens_per_target_forward_std": 0.005501729058695576,
+      "alpha_exact_mean": 0.7728723991807156,
+      "alpha_exact_std": 0.0033559943545376455,
+      "alpha_is": "EXACT: accepted / evaluated drafts (speculative_generate)",
+      "wall_s_mean_CAVEAT": 32.000110153108835,
+      "per_seed_tokens_per_target_forward": [
+        1.7729573667073666,
+        1.7604269820218097,
+        1.7709878345679562
+      ]
+    },
+    {
+      "config": "ours_fixed_gamma_3",
+      "tokens_per_target_forward_mean": 2.852236997966487,
+      "tokens_per_target_forward_std": 0.05652268100705818,
+      "alpha_exact_mean": 0.7810524922024539,
+      "alpha_exact_std": 0.01437473267387021,
+      "alpha_is": "EXACT: accepted / evaluated drafts (speculative_generate)",
+      "wall_s_mean_CAVEAT": 32.75316038937308,
+      "per_seed_tokens_per_target_forward": [
+        2.9313168449197864,
+        2.8227967555105713,
+        2.802597393469104
+      ]
+    },
+    {
+      "config": "ours_fixed_gamma_5",
+      "tokens_per_target_forward_mean": 3.5504440616572968,
+      "tokens_per_target_forward_std": 0.03771802758661524,
+      "alpha_exact_mean": 0.7895016974279102,
+      "alpha_exact_std": 0.005037187553532171,
+      "alpha_is": "EXACT: accepted / evaluated drafts (speculative_generate)",
+      "wall_s_mean_CAVEAT": 35.91350805542121,
+      "per_seed_tokens_per_target_forward": [
+        3.5225378787878787,
+        3.5250282805429864,
+        3.6037660256410255
+      ]
+    },
+    {
+      "config": "ours_gammatune",
+      "tokens_per_target_forward_mean": 3.187247765584562,
+      "tokens_per_target_forward_std": 0.0874883463257259,
+      "alpha_exact_mean": 0.773162360991881,
+      "alpha_exact_std": 0.006632151412930792,
+      "alpha_is": "EXACT: from accept_lengths / evaluated (derived from gamma_trace)",
+      "mean_gamma": 3.6660018651307014,
+      "wall_s_mean_CAVEAT": 32.64765330601949,
+      "per_seed_tokens_per_target_forward": [
+        3.0919618704505214,
+        3.166540404040404,
+        3.3032410222627613
+      ]
+    }
+  ],
+  "conclusion": "hf_constant_g3           tok/target-fwd 2.773 +/- 0.171   alpha~0.771\nhf_constant_g5           tok/target-fwd 3.041 +/- 0.145   alpha~0.716\nhf_heuristic             tok/target-fwd 4.957 +/- 0.797   alpha~0.690\nhf_confidence_0.4_static tok/target-fwd 3.782 +/- 0.172   alpha~0.708\nours_fixed_gamma_1       tok/target-fwd 1.768 +/- 0.006   alpha~0.773\nours_fixed_gamma_3       tok/target-fwd 2.852 +/- 0.057   alpha~0.781\nours_fixed_gamma_5       tok/target-fwd 3.550 +/- 0.038   alpha~0.790\nours_gammatune           tok/target-fwd 3.187 +/- 0.087   alpha~0.773\n\nOurs best = ours_fixed_gamma_5 at 3.550 tok/target-fwd. HF heuristic = 4.957. HF confidence(0.4, static) = 3.782. Not a superiority claim -- honest numbers on a hardware-independent axis. HF alpha is ESTIMATED from forward counts; close agreement with our EXACT alpha on the same pair (validated during dev at ~0.77 vs ~0.80) means the hand-written rejection sampler matches HF's. scikit-learn is absent so the confidence threshold is STATIC 0.4, not the online-retuned DSL form.\n\nCAVEAT (pitfall 14): tokens-per-target-forward has NO draft-cost term. HF 'heuristic' tops this metric by ratcheting the assistant window up to 10-15 on easy prompts (hence its large std) -- it buys the lead with many more draft forwards per round, exactly the cost this metric ignores. A cost-model comparison (c + window per round) would need HF's per-round window sizes, which this run does not capture. Our GammaTune (mean gamma ~3.7) deliberately does not chase this metric; it sits mid-pack, consistent with P5.0.",
+  "banditspec_baseline": {
+    "status": "cloned + inspected, NOT run locally",
+    "repo": "github.com/sail-sg/BanditSpec (depth-1 clone to /tmp, inspected, deleted; not committed to this repo per plan sec 3 non-goal 3)",
+    "blockers": [
+      "qwen.py line 56 does a hard top-level import of flash_attn_func / flash_attn_with_kvcache from flash_attn; flash-attn is CUDA-only, no Apple Silicon / MPS build, so the module cannot even be imported here.",
+      "inference_length.py is hard-wired to CUDA: .cuda() on every tensor, device_map=\"auto\", bf16; generate_utils.py times with torch.cuda.synchronize() throughout.",
+      "Requires EAGLE trained draft heads (eagle_qwen.py / separate model download) -- a different architecture from this project's independent-draft-model setup (draft = full Qwen2.5-0.5B)."
+    ],
+    "why_not_worked_around": "Running it unmodified is the point of using it as a baseline (plan sec 3 non-goal 3 / pitfall 12: compare against their code, do not reimplement). Making it run on MPS needs replacing the custom flash-attn Qwen attention, stripping all CUDA calls, and supplying/training an EAGLE head -- at which point it is no longer their code.",
+    "disposition": "Belongs on the cloud GPU stage (M7/M8) where CUDA + flash-attn + EAGLE models are available. Recorded here as a known-unrun baseline; not a failure (task 2b is explicitly optional)."
+  }
+}

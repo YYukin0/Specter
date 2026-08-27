@@ -72,8 +72,8 @@
 
 ## M8 — 生产基线对比 + held-out 最终确认（支柱5收尾）
 
-- [ ] **[A]** P5.4 HF 双基线（`num_assistant_tokens_schedule` + `assistant_confidence_threshold`）
-- [ ] **[B]** P5.4 BanditSpec 公开代码克隆运行
+- [~] **[A]** P5.4 HF 双基线（`num_assistant_tokens_schedule` + `assistant_confidence_threshold`）—— **部分完成（HF 双基线 done，BanditSpec 待云端）**。`src/verify_hf_baseline.py`，结果 `results/p5_4_hf_baseline.json`：8 prompt × seed{0,1,2}、temp=1.0，双模型采样口径全对齐（both models temp=1.0/top_k=0/top_p=1.0/rep=1.0）。**API 关键点（transformers 5.16.1）**：`num_assistant_tokens` / `num_assistant_tokens_schedule` / `assistant_confidence_threshold` 从 `draft.generation_config` 读，传给 `target.generate()` 会被静默忽略（踩过：4 个配置输出逐 bit 相同直到改对）。主指标=每次 target 前向的 token 产出（硬件无关；HF 用 KV cache、我们不用，墙钟不可比）。结果：hf_heuristic 4.96±0.80 > hf_confidence_0.4(static) 3.78±0.17 > ours_fixed_γ5 3.55 > ours_gammatune 3.19 > hf_constant_g5 3.04 > ours_fixed_γ3 2.85。**α 对齐验证通过**：ours α_exact 0.77–0.79 vs HF α_est 0.69–0.77（hf_constant_g3 0.771 对 ours_γ3 0.781 几乎重合）——手写 rejection sampler 与 HF 参考实现一致，无正确性红旗。**坑14 caveat**：该指标无 draft 代价项，hf_heuristic 靠把 assistant 窗口冲到 10–15（故 std 大）在此指标登顶，买的是每轮更多 draft 前向；成本模型排名需 HF 逐轮窗口大小，本轮未采集。sklearn 未装 → `assistant_confidence_threshold` 为静态 0.4（非 DSL 在线 ROC 重调）。
+- [~] **[B]** P5.4 BanditSpec 公开代码克隆运行 —— **克隆+读代码，本地不可运行**（记录在 `results/p5_4_hf_baseline.json` 的 `banditspec_baseline` 字段，未提交第三方代码进本仓库）。阻塞：`qwen.py` 顶层硬 import `flash_attn`（CUDA-only，无 Apple Silicon 版）；`inference_length.py` 全程 `.cuda()`/`device_map=auto`/`torch.cuda.synchronize()`；需 EAGLE 训练草稿头（与本项目独立草稿模型架构不同）。绕开需重写其 flash-attn Qwen + 剥离 CUDA + 提供 EAGLE 头，届时已非"跑其原代码"。留云端阶段（M7/M8）。不算失败（Task 2b 本就可选）。
 - [ ] **[A+B 联合，必须双人在场]** held-out 任务集最终跑一次（§9.6风险1，只能跑这一次，不能回头调整）
 
 ## M9 — 产出（阶段7）【A+B 联合】
