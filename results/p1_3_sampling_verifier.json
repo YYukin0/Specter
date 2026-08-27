@@ -1,0 +1,147 @@
+{
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "gamma": 4,
+  "temperature": 1.0,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "statistical_alpha": {
+    "n_proposals": 937,
+    "empirical_alpha": 0.7876200640341515,
+    "theoretical_alpha": 0.7980719674199724,
+    "abs_diff": 0.010451903385820915,
+    "se_poisson_binomial": 0.011004994795738316,
+    "se_bernoulli": 0.013361195936229212,
+    "z_score": -0.9497417836006987,
+    "agrees_within_2se": true,
+    "per_prompt": [
+      {
+        "prompt": "Explain in two sentences why the sky is blue.",
+        "n": 120,
+        "empirical_alpha": 0.6833333333333333,
+        "theoretical_alpha": 0.7131481232742468
+      },
+      {
+        "prompt": "Write a short haiku about autumn.",
+        "n": 59,
+        "empirical_alpha": 0.7457627118644068,
+        "theoretical_alpha": 0.6641693245935238
+      },
+      {
+        "prompt": "What are three tips for staying focused while st",
+        "n": 128,
+        "empirical_alpha": 0.78125,
+        "theoretical_alpha": 0.7836134203244001
+      },
+      {
+        "prompt": "Summarize the plot of Cinderella in one paragrap",
+        "n": 130,
+        "empirical_alpha": 0.7384615384615385,
+        "theoretical_alpha": 0.7159358459883012
+      },
+      {
+        "prompt": "Give me a recipe idea for a quick weeknight dinn",
+        "n": 129,
+        "empirical_alpha": 0.7596899224806202,
+        "theoretical_alpha": 0.7875256734763005
+      },
+      {
+        "prompt": "Write a Python function that returns the nth Fib",
+        "n": 120,
+        "empirical_alpha": 0.925,
+        "theoretical_alpha": 0.9488387639323871
+      },
+      {
+        "prompt": "Fix the bug: `def add(a, b): return a - b` shoul",
+        "n": 127,
+        "empirical_alpha": 0.7952755905511811,
+        "theoretical_alpha": 0.8044682036586633
+      },
+      {
+        "prompt": "Write a bash one-liner to find all .txt files mo",
+        "n": 124,
+        "empirical_alpha": 0.8548387096774194,
+        "theoretical_alpha": 0.9035206881742324
+      }
+    ]
+  },
+  "bonus_provenance": {
+    "correct_impl": {
+      "n_bonus_tokens": 138,
+      "mean_log_p_tm": -0.559030195791602,
+      "mean_log_p_dm": -0.9382723736383978,
+      "delta_mean": 0.3792421778467958
+    },
+    "bonus_from_draft_bug": {
+      "n_bonus_tokens": 134,
+      "mean_log_p_tm": -1.274682456445987,
+      "mean_log_p_dm": -0.8650485777484005,
+      "delta_mean": -0.40963387869758655
+    },
+    "separates_correct_from_bug": true,
+    "note": "delta = mean(log p_TM(bonus) - log p_DM(bonus)); >=0 means bonus follows the target, <0 means it leaked from the draft"
+  },
+  "downstream_parity": {
+    "n_generations_per_method": 30,
+    "spec_rougeL_mean_points": 29.552460396267996,
+    "target_only_rougeL_mean_points": 31.248731185385854,
+    "gap_points": 1.6962707891178574,
+    "within_2_points": true,
+    "per_item": [
+      {
+        "summary_ref": "Photosynthesis lets plants and some microbes turn sunlight, ",
+        "spec_rougeL_mean": 0.34803001876172607,
+        "target_only_rougeL_mean": 0.3302707930367505
+      },
+      {
+        "summary_ref": "The water cycle is the sun-driven movement of water between ",
+        "spec_rougeL_mean": 0.42759195483637624,
+        "target_only_rougeL_mean": 0.5410117434507679
+      },
+      {
+        "summary_ref": "Plate tectonics explains earthquakes, mountains, and new cru",
+        "spec_rougeL_mean": 0.22743422155186863,
+        "target_only_rougeL_mean": 0.21138211382113822
+      },
+      {
+        "summary_ref": "Vaccines expose the immune system to a harmless version of a",
+        "spec_rougeL_mean": 0.30730165136380455,
+        "target_only_rougeL_mean": 0.32682682682682684
+      },
+      {
+        "summary_ref": "Gutenberg's movable-type press made books cheap to produce a",
+        "spec_rougeL_mean": 0.34620905099628513,
+        "target_only_rougeL_mean": 0.35600631057020515
+      },
+      {
+        "summary_ref": "A black hole is a collapsed massive star whose gravity traps",
+        "spec_rougeL_mean": 0.2132019474456449,
+        "target_only_rougeL_mean": 0.14433754091408865
+      },
+      {
+        "summary_ref": "Overusing antibiotics drives bacteria to evolve resistance, ",
+        "spec_rougeL_mean": 0.21989121989121987,
+        "target_only_rougeL_mean": 0.3127036493971978
+      },
+      {
+        "summary_ref": "The Great Barrier Reef is the world's largest coral system, ",
+        "spec_rougeL_mean": 0.3327568315461778,
+        "target_only_rougeL_mean": 0.42477954144620816
+      },
+      {
+        "summary_ref": "Compound interest is paid on principal plus past interest, s",
+        "spec_rougeL_mean": 0.27473293727163695,
+        "target_only_rougeL_mean": 0.26422764227642276
+      },
+      {
+        "summary_ref": "The internet routes data as independently forwarded packets ",
+        "spec_rougeL_mean": 0.2580962059620596,
+        "target_only_rougeL_mean": 0.21332695679897973
+      }
+    ]
+  },
+  "p1_3_pass": true
+}

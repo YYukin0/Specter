@@ -1,0 +1,209 @@
+{
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "gamma": 4,
+  "max_new_tokens": 64,
+  "forward_check": {
+    "prompts_matching_target_only": 8,
+    "prompts_total": 8,
+    "pass": true,
+    "per_prompt": [
+      {
+        "prompt": "Explain in two sentences why the sky is blue.",
+        "spec_len": 35,
+        "ref_len": 35,
+        "hf_ref_len": 35,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 2.5454545454545454
+      },
+      {
+        "prompt": "Write a short haiku about autumn.",
+        "spec_len": 25,
+        "ref_len": 25,
+        "hf_ref_len": 25,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 1.5454545454545454
+      },
+      {
+        "prompt": "What are three tips for staying focused while studying?",
+        "spec_len": 65,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 1.826086956521739
+      },
+      {
+        "prompt": "Summarize the plot of Cinderella in one paragraph.",
+        "spec_len": 64,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 1.7826086956521738
+      },
+      {
+        "prompt": "Give me a recipe idea for a quick weeknight dinner.",
+        "spec_len": 65,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 1.9545454545454546
+      },
+      {
+        "prompt": "Write a Python function that returns the nth Fibonacci number.",
+        "spec_len": 65,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 3.642857142857143
+      },
+      {
+        "prompt": "Fix the bug: `def add(a, b): return a - b` should add two numbers.",
+        "spec_len": 65,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 2.611111111111111
+      },
+      {
+        "prompt": "Write a bash one-liner to find all .txt files modified in the last 24 hours.",
+        "spec_len": 65,
+        "ref_len": 64,
+        "hf_ref_len": 64,
+        "match_vs_target_only": true,
+        "match_vs_hf_generate": true,
+        "first_divergence_index": null,
+        "mean_accept_len": 3.3333333333333335
+      }
+    ]
+  },
+  "reverse_check": {
+    "pass": true,
+    "bugs": {
+      "bonus_from_draft": {
+        "prompts_with_opportunity": 8,
+        "prompts_where_verifier_flagged": 5,
+        "verifier_catches_this_bug": true,
+        "per_prompt": [
+          {
+            "prompt": "Explain in two sentences why the sky is blue.",
+            "opportunity": true,
+            "diverged_from_target_only": false,
+            "first_divergence_index": null
+          },
+          {
+            "prompt": "Write a short haiku about autumn.",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 4
+          },
+          {
+            "prompt": "What are three tips for staying focused while st",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 22
+          },
+          {
+            "prompt": "Summarize the plot of Cinderella in one paragrap",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 16
+          },
+          {
+            "prompt": "Give me a recipe idea for a quick weeknight dinn",
+            "opportunity": true,
+            "diverged_from_target_only": false,
+            "first_divergence_index": null
+          },
+          {
+            "prompt": "Write a Python function that returns the nth Fib",
+            "opportunity": true,
+            "diverged_from_target_only": false,
+            "first_divergence_index": null
+          },
+          {
+            "prompt": "Fix the bug: `def add(a, b): return a - b` shoul",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 9
+          },
+          {
+            "prompt": "Write a bash one-liner to find all .txt files mo",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 18
+          }
+        ]
+      },
+      "force_accept_index_0": {
+        "prompts_with_opportunity": 8,
+        "prompts_where_verifier_flagged": 7,
+        "verifier_catches_this_bug": true,
+        "per_prompt": [
+          {
+            "prompt": "Explain in two sentences why the sky is blue.",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 18
+          },
+          {
+            "prompt": "Write a short haiku about autumn.",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 10
+          },
+          {
+            "prompt": "What are three tips for staying focused while st",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 0
+          },
+          {
+            "prompt": "Summarize the plot of Cinderella in one paragrap",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 5
+          },
+          {
+            "prompt": "Give me a recipe idea for a quick weeknight dinn",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 6
+          },
+          {
+            "prompt": "Write a Python function that returns the nth Fib",
+            "opportunity": true,
+            "diverged_from_target_only": false,
+            "first_divergence_index": null
+          },
+          {
+            "prompt": "Fix the bug: `def add(a, b): return a - b` shoul",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 18
+          },
+          {
+            "prompt": "Write a bash one-liner to find all .txt files mo",
+            "opportunity": true,
+            "diverged_from_target_only": true,
+            "first_divergence_index": 8
+          }
+        ]
+      }
+    }
+  },
+  "p1_2_pass": true
+}

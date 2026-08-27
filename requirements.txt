@@ -1,0 +1,23 @@
+# Specter dependencies. This file was empty until M2 (P1.1-P1.4); versions below
+# are what those tasks were developed and run against on the 24GB Mac.
+#
+# Core: speculative decoding (P1.1-P1.4), the P1.0 gate, and the P2/P4 Track B
+# scripts all run on HF Transformers with the PyTorch MPS backend.
+torch==2.13.0
+transformers==5.16.1
+tokenizers==0.23.1
+safetensors==0.8.0
+huggingface-hub
+accelerate==1.14.0
+sentencepiece==0.2.2
+numpy==2.5.2
+
+# Tests (tests/test_rejection_sampling.py -- the appendix A.1 numerical example
+# and the FakeModel fault-injection checks). Runs without a network or GPU.
+pytest==9.1.1
+
+# P1.3 downstream parity uses ROUGE-L, implemented inline in src/verify_sampling.py
+# (LCS F1, same formula as rouge-score's rougeL) to keep the run dependency-free
+# and hermetic -- no dataset download, no code-execution sandbox. HumanEval was
+# considered and rejected: a 1.5B target is too weak at code for pass@1 to be
+# more than noise at the sample sizes feasible here.
