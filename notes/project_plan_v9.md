@@ -237,6 +237,10 @@ Algorithm 1：接受数 A 与当前 γ 相等时扩窗（$\gamma \leftarrow A + 
 
 **坑6**：校准集太小会过拟合——标准实践C4数据集、group size 128。**应对**：P2.3做校准集大小消融。
 
+**坑16（2026-08-28，M1 P2.3 实现时踩到）**：自研 AWQ 的 `capture_all_layer_inputs` 一次前向就把全部 196 个目标 Linear 的输入激活捕获进内存（不是逐层量化-释放），因此必须有一个 `max_tokens_per_layer` 上限防 OOM。它的捕获循环写成"每层都攒够 `max_tokens_per_layer` 就 `break`"。P2.3 校准集大小消融复用 P2.2 的 `_quantize_fresh`，后者把这个上限**写死成 512**、每条校准序列也截断到 512 token——于是**第一条 512-token 的 wikitext 行就把每层的池子填满，捕获立即停止**。结果：`n_calib ∈ {8,16,32,64,128}` 喂进去的是**逐 bit 相同**的"前 512 token"池，量化结果、perplexity 全都一模一样（seed 0：n_calib=4/8/16/32/64 都是 13.6015）。**为什么容易误判**：这条平坦曲线**正好符合预期**——AWQ 论文说"小校准集就够"，Michael 3B 那份也几乎平（11.22→11.27），会让人直接写"复现成功"。是 §9.6 风险4（符合预期的结果要反向复核）的教科书案例：真正的复核问题是"这个 n_calib 旋钮到底有没有拧动"，而不是"曲线平不平"。**应对**：(a) `_quantize_fresh` 增开 `max_tokens_per_layer` / `max_seq_len` 参数（默认仍 512，P2.2 行为字节级不变）；(b) P2.3 把每行截到 64 token、上限设成 `n_calib × 64`，让池子真正随 n_calib 线性增长；(c) 结果 JSON 记录每个 n_calib 实际捕获到的 `captured_tokens_per_layer`，并加一个 `capture_knob_actually_moved` 布尔——`max/min ≤ 1.5×` 时 verdict 字符串自动标注"cap 仍在生效，曲线不作数"；(d) `n_calib=128` 从网格里去掉（8192 token/层 × ~509k 汇总 in-features × 4B ≈ 17GB CPU 侧捕获，24GB 机器会爆），更大规模需要把 `capture_all_layer_inputs` 改成逐层量化即释放（留给用户拍板）。
+
+**坑17（2026-08-28，M1 P2.2 语料替换）**：记忆/plan 里写"本地已缓存 `codeparrot/codeparrot-clean-valid` 和 `allenai/c4`"，实际 `~/.cache/huggingface/datasets/` 下只有这两个的 README snapshot、没有数据分片，`HF_HUB_OFFLINE=1` 下取不到。P2.2 跨分布实验的"代码"分布只能退回用 `google-research-datasets/mbpp` 的 `code` 字段（全 split 拼起来 ~176k 字符）。**为什么容易误判**：mbpp 的题解都是 3–8 行、结构高度模板化的小函数，比真实代码语料窄得多——用它当校准集会让"跨分布涨幅"被**放大**（P2.2 实测 calib=code→eval=NL 比 calib=NL→eval=NL 多涨 +0.56 ppl，看起来像"AWQ 跨分布不稳"，但部分是 mbpp 太窄造成的假象），用它当评测集则 ppl 低得不正常（fp16 baseline 才 3.1）。**应对**：P2.2 结果文件里 `code_corpus_note` 显式写明用的是 mbpp 替代、fp16 baseline 数字、以及"跨分布涨幅含 mbpp 窄语料贡献、非纯 AWQ 效应"；GPTQ 对照臂和真正的 code 语料（codeparrot/c4）留云端阶段，届时重跑 P2.2。
+
 ### 9.4 支柱4已知坑
 
 **坑7**：Nightjar实测高负载下投机解码相对无投机倒退最多30.25%，比"batch>64开始下降"更极端更具体。**应对**：P4.2对标这个数字。
