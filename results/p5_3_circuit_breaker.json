@@ -1,0 +1,1115 @@
+{
+  "task": "P5.3",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "temperature": 1.0,
+  "max_new_tokens": 40,
+  "n_prompts": 8,
+  "config": {
+    "batch_threshold": 8,
+    "reprobe_every": 50,
+    "reprobe_gamma": 3,
+    "spec_gamma": 3
+  },
+  "batch_signal": "SYNTHETIC, externally injected -- there is no real high-batch throughput on this machine. Real batch curve wiring is M5[A]/cloud.",
+  "primary_metric": "Metric A = cost-model throughput total_emitted/total_cost_units with spec round = c+gamma, target step = c (task decision point 6). This metric has NO batch-dependent term, so always-spec is an upper bound the breaker can only tie -- pitfall 14 resurfacing. Kept as headline per sec 9.6 risk 1 (no redefining to win).",
+  "metric_b": "saturation-aware sensitivity: while batch>=threshold a spec/probe round's gamma draft forwards cost sat_tax units each (contention on a saturated accelerator, pitfall 7 / Nightjar up-to-30.25% regression). sat_tax in {1,2,3}; ~3 reproduces Nightjar's regression order of magnitude for c in {4,7,10}. sat_tax=1 == Metric A.",
+  "wall_clock_caveat": "MPS, no KV cache -- wall-clock is unreliable (P1.4: fixed-gamma speedup < 1.0 for gamma >= 5). Real throughput is M5[A]/cloud.",
+  "measured_c": {
+    "c": 1.2812775435185122,
+    "t_draft_s": 0.004861523036379367,
+    "t_target_s": 0.006228960293810815,
+    "reps": 20,
+    "ctx_len": 64
+  },
+  "sat_tax_values": [
+    1,
+    2,
+    3
+  ],
+  "per_trace": [
+    {
+      "trace_name": "single_spike",
+      "trace_len_rounds": 115,
+      "trace_segments": [
+        {
+          "segment": "low",
+          "rounds": 30
+        },
+        {
+          "segment": "high",
+          "rounds": 25
+        },
+        {
+          "segment": "low",
+          "rounds": 60
+        }
+      ],
+      "low_batch_round_fraction": 0.782608695652174,
+      "throughput": {
+        "always_spec": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.6552560740063136,
+              "std": 0.02309672128031759,
+              "per_seed": [
+                0.6867109104970099,
+                0.6319041723778973,
+                0.6471531391440336
+              ]
+            },
+            "c4": {
+              "mean": 0.4007618735567622,
+              "std": 0.01412621059233284,
+              "per_seed": [
+                0.42,
+                0.3864795918367347,
+                0.39580602883355176
+              ]
+            },
+            "c7": {
+              "mean": 0.2805333114897335,
+              "std": 0.009888347414632988,
+              "per_seed": [
+                0.294,
+                0.27053571428571427,
+                0.27706422018348625
+              ]
+            },
+            "c10": {
+              "mean": 0.2157948549921027,
+              "std": 0.007606421088179218,
+              "per_seed": [
+                0.22615384615384615,
+                0.20810439560439561,
+                0.21312632321806635
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.5627753043520988,
+              "std": 0.01591204557023641,
+              "per_seed": [
+                0.5843446270992191,
+                0.5464351926352417,
+                0.5575460933218355
+              ]
+            },
+            "c4": {
+              "mean": 0.36415747983884034,
+              "std": 0.011190340602792321,
+              "per_seed": [
+                0.3793548387096774,
+                0.35273573923166474,
+                0.360381861575179
+              ]
+            },
+            "c7": {
+              "mean": 0.26209077508661016,
+              "std": 0.008385261818338301,
+              "per_seed": [
+                0.27348837209302324,
+                0.2535564853556485,
+                0.2592274678111588
+              ]
+            },
+            "c10": {
+              "mean": 0.20471363776187937,
+              "std": 0.00669521257611127,
+              "per_seed": [
+                0.21381818181818182,
+                0.19790986283474854,
+                0.20241286863270777
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.4932019231106794,
+              "std": 0.01137407011788116,
+              "per_seed": [
+                0.5085381177203788,
+                0.4813320336001411,
+                0.48973561801151827
+              ]
+            },
+            "c4": {
+              "mean": 0.3336903813078926,
+              "std": 0.009004305533048554,
+              "per_seed": [
+                0.3458823529411765,
+                0.32441113490364026,
+                0.3307776560788609
+              ]
+            },
+            "c7": {
+              "mean": 0.24592774605839066,
+              "std": 0.007168818666326682,
+              "per_seed": [
+                0.25565217391304346,
+                0.23858267716535433,
+                0.2435483870967742
+              ]
+            },
+            "c10": {
+              "mean": 0.19471702323805773,
+              "std": 0.00592262345918663,
+              "per_seed": [
+                0.20275862068965517,
+                0.18866749688667497,
+                0.19272495213784302
+              ]
+            }
+          }
+        },
+        "always_target": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          }
+        },
+        "circuit_breaker": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.6356610100923287,
+              "std": 0.02428131038576828,
+              "per_seed": [
+                0.6699735953022563,
+                0.6173394178548157,
+                0.619670017119914
+              ]
+            },
+            "c4": {
+              "mean": 0.36398270949565564,
+              "std": 0.012852003730510106,
+              "per_seed": [
+                0.38212435233160624,
+                0.3539518900343643,
+                0.35587188612099646
+              ]
+            },
+            "c7": {
+              "mean": 0.2473372232484389,
+              "std": 0.008428721955076856,
+              "per_seed": [
+                0.2592267135325132,
+                0.24065420560747663,
+                0.24213075060532688
+              ]
+            },
+            "c10": {
+              "mean": 0.18731024683637965,
+              "std": 0.006264853677079024,
+              "per_seed": [
+                0.19614361702127658,
+                0.18230088495575222,
+                0.1834862385321101
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.6356610100923287,
+              "std": 0.02428131038576828,
+              "per_seed": [
+                0.6699735953022563,
+                0.6173394178548157,
+                0.619670017119914
+              ]
+            },
+            "c4": {
+              "mean": 0.36398270949565564,
+              "std": 0.012852003730510106,
+              "per_seed": [
+                0.38212435233160624,
+                0.3539518900343643,
+                0.35587188612099646
+              ]
+            },
+            "c7": {
+              "mean": 0.2473372232484389,
+              "std": 0.008428721955076856,
+              "per_seed": [
+                0.2592267135325132,
+                0.24065420560747663,
+                0.24213075060532688
+              ]
+            },
+            "c10": {
+              "mean": 0.18731024683637965,
+              "std": 0.006264853677079024,
+              "per_seed": [
+                0.19614361702127658,
+                0.18230088495575222,
+                0.1834862385321101
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.6356610100923287,
+              "std": 0.02428131038576828,
+              "per_seed": [
+                0.6699735953022563,
+                0.6173394178548157,
+                0.619670017119914
+              ]
+            },
+            "c4": {
+              "mean": 0.36398270949565564,
+              "std": 0.012852003730510106,
+              "per_seed": [
+                0.38212435233160624,
+                0.3539518900343643,
+                0.35587188612099646
+              ]
+            },
+            "c7": {
+              "mean": 0.2473372232484389,
+              "std": 0.008428721955076856,
+              "per_seed": [
+                0.2592267135325132,
+                0.24065420560747663,
+                0.24213075060532688
+              ]
+            },
+            "c10": {
+              "mean": 0.18731024683637965,
+              "std": 0.006264853677079024,
+              "per_seed": [
+                0.19614361702127658,
+                0.18230088495575222,
+                0.1834862385321101
+              ]
+            }
+          }
+        }
+      },
+      "verdicts": {
+        "sat_tax_1": {
+          "c": "c7",
+          "sat_tax": 1,
+          "circuit_breaker_mean_std": [
+            0.2473372232484389,
+            0.008428721955076856
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.2805333114897335,
+            0.009888347414632988
+          ],
+          "tie_within_1std": false,
+          "verdict": "circuit breaker 0.2473+/-0.0084 BELOW always_spec 0.2805+/-0.0099 (disjoint). Does not beat the baseline at sat_tax=1."
+        },
+        "sat_tax_2": {
+          "c": "c7",
+          "sat_tax": 2,
+          "circuit_breaker_mean_std": [
+            0.2473372232484389,
+            0.008428721955076856
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.26209077508661016,
+            0.008385261818338301
+          ],
+          "tie_within_1std": true,
+          "verdict": "circuit breaker 0.2473+/-0.0084 vs always_spec 0.2621+/-0.0084: numerically lower but +/-1 std intervals overlap -- statistical tie, counts"
+        },
+        "sat_tax_3": {
+          "c": "c7",
+          "sat_tax": 3,
+          "circuit_breaker_mean_std": [
+            0.2473372232484389,
+            0.008428721955076856
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.24592774605839066,
+            0.007168818666326682
+          ],
+          "tie_within_1std": true,
+          "verdict": "circuit breaker 0.2473 >= best baseline (always_spec) 0.2459 -- meets criterion"
+        }
+      },
+      "circuit_breaker_secondary": [
+        {
+          "seed": 0,
+          "lag": {
+            "degrade_lag_rounds": [
+              0
+            ],
+            "restore_lag_rounds": [
+              1
+            ],
+            "n_crossings": 2,
+            "n_switches": 2
+          },
+          "reprobe": {
+            "n_reprobes": 1,
+            "reprobe_alpha_mean": 0.5,
+            "reference_alpha": 0.7983870967741935,
+            "mean_abs_dev_from_ref_alpha": 0.2983870967741935,
+            "max_abs_dev": 0.2983870967741935
+          },
+          "n_spec_rounds": 96,
+          "n_target_rounds": 25,
+          "n_reprobe_rounds": 1,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 69,
+            "draft_forward_ms": 5.204208195209503,
+            "target_forward_ms": 6.412662309594452,
+            "switch_cost_ms": 11.616870504803956,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.0008281199757407667
+        },
+        {
+          "seed": 1,
+          "lag": {
+            "degrade_lag_rounds": [
+              0
+            ],
+            "restore_lag_rounds": [
+              1
+            ],
+            "n_crossings": 2,
+            "n_switches": 2
+          },
+          "reprobe": {
+            "n_reprobes": 1,
+            "reprobe_alpha_mean": 0.0,
+            "reference_alpha": 0.7490196078431373,
+            "mean_abs_dev_from_ref_alpha": 0.7490196078431373,
+            "max_abs_dev": 0.7490196078431373
+          },
+          "n_spec_rounds": 111,
+          "n_target_rounds": 25,
+          "n_reprobe_rounds": 1,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 39,
+            "draft_forward_ms": 5.103312502615154,
+            "target_forward_ms": 5.981420795433223,
+            "switch_cost_ms": 11.084733298048377,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.0007201178671880265
+        },
+        {
+          "seed": 2,
+          "lag": {
+            "degrade_lag_rounds": [
+              0
+            ],
+            "restore_lag_rounds": [
+              1
+            ],
+            "n_crossings": 2,
+            "n_switches": 2
+          },
+          "reprobe": {
+            "n_reprobes": 1,
+            "reprobe_alpha_mean": 1.0,
+            "reference_alpha": 0.7813765182186235,
+            "mean_abs_dev_from_ref_alpha": 0.21862348178137647,
+            "max_abs_dev": 0.21862348178137647
+          },
+          "n_spec_rounds": 106,
+          "n_target_rounds": 25,
+          "n_reprobe_rounds": 1,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 54,
+            "draft_forward_ms": 5.280291778035462,
+            "target_forward_ms": 6.182612490374595,
+            "switch_cost_ms": 11.462904268410057,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.0007557300677591969
+        }
+      ],
+      "wall_s_mean": {
+        "always_spec": 26.212422402963664,
+        "always_target": 30.46490212494973,
+        "circuit_breaker": 29.725956528020713
+      },
+      "pooled_always_spec_alpha": 0.7762610742786514
+    },
+    {
+      "trace_name": "double_spike",
+      "trace_len_rounds": 140,
+      "trace_segments": [
+        {
+          "segment": "low",
+          "rounds": 20
+        },
+        {
+          "segment": "high",
+          "rounds": 20
+        },
+        {
+          "segment": "low",
+          "rounds": 25
+        },
+        {
+          "segment": "high",
+          "rounds": 20
+        },
+        {
+          "segment": "low",
+          "rounds": 55
+        }
+      ],
+      "low_batch_round_fraction": 0.7142857142857143,
+      "throughput": {
+        "always_spec": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.6552560740063136,
+              "std": 0.02309672128031759,
+              "per_seed": [
+                0.6867109104970099,
+                0.6319041723778973,
+                0.6471531391440336
+              ]
+            },
+            "c4": {
+              "mean": 0.4007618735567622,
+              "std": 0.01412621059233284,
+              "per_seed": [
+                0.42,
+                0.3864795918367347,
+                0.39580602883355176
+              ]
+            },
+            "c7": {
+              "mean": 0.2805333114897335,
+              "std": 0.009888347414632988,
+              "per_seed": [
+                0.294,
+                0.27053571428571427,
+                0.27706422018348625
+              ]
+            },
+            "c10": {
+              "mean": 0.2157948549921027,
+              "std": 0.007606421088179218,
+              "per_seed": [
+                0.22615384615384615,
+                0.20810439560439561,
+                0.21312632321806635
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.5188563745744048,
+              "std": 0.01296109777811611,
+              "per_seed": [
+                0.5363713069914666,
+                0.5054185835651632,
+                0.5147792331665846
+              ]
+            },
+            "c4": {
+              "mean": 0.3452431438519779,
+              "std": 0.009805753592861028,
+              "per_seed": [
+                0.35853658536585364,
+                0.33517699115044247,
+                0.3420158550396376
+              ]
+            },
+            "c7": {
+              "mean": 0.25214720518972716,
+              "std": 0.007625770539803916,
+              "per_seed": [
+                0.2625,
+                0.24435483870967742,
+                0.24958677685950414
+              ]
+            },
+            "c10": {
+              "mean": 0.1985959330330235,
+              "std": 0.006216846806817456,
+              "per_seed": [
+                0.20704225352112676,
+                0.19225888324873097,
+                0.19648666232921275
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.42950751827158945,
+              "std": 0.007868151764139793,
+              "per_seed": [
+                0.44003560409671727,
+                0.4211239762134316,
+                0.42736297450461946
+              ]
+            },
+            "c4": {
+              "mean": 0.30325370160573245,
+              "std": 0.007053026173152028,
+              "per_seed": [
+                0.3127659574468085,
+                0.2958984375,
+                0.30109670987038883
+              ]
+            },
+            "c7": {
+              "mean": 0.2289861870045132,
+              "std": 0.00599455469985221,
+              "per_seed": [
+                0.23709677419354838,
+                0.22279411764705884,
+                0.22706766917293233
+              ]
+            },
+            "c10": {
+              "mean": 0.18394061413833165,
+              "std": 0.0051421349160543205,
+              "per_seed": [
+                0.19090909090909092,
+                0.1786556603773585,
+                0.18225709112854557
+              ]
+            }
+          }
+        },
+        "always_target": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.7804710267955705,
+              "std": 0.0,
+              "per_seed": [
+                0.7804710267955705,
+                0.7804710267955705,
+                0.7804710267955705
+              ]
+            },
+            "c4": {
+              "mean": 0.25,
+              "std": 0.0,
+              "per_seed": [
+                0.25,
+                0.25,
+                0.25
+              ]
+            },
+            "c7": {
+              "mean": 0.14285714285714285,
+              "std": 0.0,
+              "per_seed": [
+                0.14285714285714285,
+                0.14285714285714285,
+                0.14285714285714285
+              ]
+            },
+            "c10": {
+              "mean": 0.10000000000000002,
+              "std": 0.0,
+              "per_seed": [
+                0.1,
+                0.1,
+                0.1
+              ]
+            }
+          }
+        },
+        "circuit_breaker": {
+          "sat_tax_1": {
+            "measured": {
+              "mean": 0.6915798606769665,
+              "std": 0.01969657345488919,
+              "per_seed": [
+                0.7007067211618672,
+                0.6642248130706117,
+                0.7098080477984209
+              ]
+            },
+            "c4": {
+              "mean": 0.37916511686691523,
+              "std": 0.011309050635211362,
+              "per_seed": [
+                0.3836150845253576,
+                0.36363636363636365,
+                0.3902439024390244
+              ]
+            },
+            "c7": {
+              "mean": 0.25303415295615955,
+              "std": 0.007690170814443166,
+              "per_seed": [
+                0.25585429314830876,
+                0.2425277540563621,
+                0.2607204116638079
+              ]
+            },
+            "c10": {
+              "mean": 0.18987238465622133,
+              "std": 0.005825208692137497,
+              "per_seed": [
+                0.19193233571893298,
+                0.18193465727098015,
+                0.1957501609787508
+              ]
+            }
+          },
+          "sat_tax_2": {
+            "measured": {
+              "mean": 0.6915798606769665,
+              "std": 0.01969657345488919,
+              "per_seed": [
+                0.7007067211618672,
+                0.6642248130706117,
+                0.7098080477984209
+              ]
+            },
+            "c4": {
+              "mean": 0.37916511686691523,
+              "std": 0.011309050635211362,
+              "per_seed": [
+                0.3836150845253576,
+                0.36363636363636365,
+                0.3902439024390244
+              ]
+            },
+            "c7": {
+              "mean": 0.25303415295615955,
+              "std": 0.007690170814443166,
+              "per_seed": [
+                0.25585429314830876,
+                0.2425277540563621,
+                0.2607204116638079
+              ]
+            },
+            "c10": {
+              "mean": 0.18987238465622133,
+              "std": 0.005825208692137497,
+              "per_seed": [
+                0.19193233571893298,
+                0.18193465727098015,
+                0.1957501609787508
+              ]
+            }
+          },
+          "sat_tax_3": {
+            "measured": {
+              "mean": 0.6915798606769665,
+              "std": 0.01969657345488919,
+              "per_seed": [
+                0.7007067211618672,
+                0.6642248130706117,
+                0.7098080477984209
+              ]
+            },
+            "c4": {
+              "mean": 0.37916511686691523,
+              "std": 0.011309050635211362,
+              "per_seed": [
+                0.3836150845253576,
+                0.36363636363636365,
+                0.3902439024390244
+              ]
+            },
+            "c7": {
+              "mean": 0.25303415295615955,
+              "std": 0.007690170814443166,
+              "per_seed": [
+                0.25585429314830876,
+                0.2425277540563621,
+                0.2607204116638079
+              ]
+            },
+            "c10": {
+              "mean": 0.18987238465622133,
+              "std": 0.005825208692137497,
+              "per_seed": [
+                0.19193233571893298,
+                0.18193465727098015,
+                0.1957501609787508
+              ]
+            }
+          }
+        }
+      },
+      "verdicts": {
+        "sat_tax_1": {
+          "c": "c7",
+          "sat_tax": 1,
+          "circuit_breaker_mean_std": [
+            0.25303415295615955,
+            0.007690170814443166
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.2805333114897335,
+            0.009888347414632988
+          ],
+          "tie_within_1std": false,
+          "verdict": "circuit breaker 0.2530+/-0.0077 BELOW always_spec 0.2805+/-0.0099 (disjoint). Does not beat the baseline at sat_tax=1."
+        },
+        "sat_tax_2": {
+          "c": "c7",
+          "sat_tax": 2,
+          "circuit_breaker_mean_std": [
+            0.25303415295615955,
+            0.007690170814443166
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.25214720518972716,
+            0.007625770539803916
+          ],
+          "tie_within_1std": true,
+          "verdict": "circuit breaker 0.2530 >= best baseline (always_spec) 0.2521 -- meets criterion"
+        },
+        "sat_tax_3": {
+          "c": "c7",
+          "sat_tax": 3,
+          "circuit_breaker_mean_std": [
+            0.25303415295615955,
+            0.007690170814443166
+          ],
+          "best_baseline": "always_spec",
+          "best_baseline_mean_std": [
+            0.2289861870045132,
+            0.00599455469985221
+          ],
+          "tie_within_1std": false,
+          "verdict": "circuit breaker 0.2530 >= best baseline (always_spec) 0.2290 -- meets criterion"
+        }
+      },
+      "circuit_breaker_secondary": [
+        {
+          "seed": 0,
+          "lag": {
+            "degrade_lag_rounds": [
+              0,
+              0
+            ],
+            "restore_lag_rounds": [
+              1,
+              1
+            ],
+            "n_crossings": 4,
+            "n_switches": 4
+          },
+          "reprobe": {
+            "n_reprobes": 2,
+            "reprobe_alpha_mean": 0.75,
+            "reference_alpha": 0.7983870967741935,
+            "mean_abs_dev_from_ref_alpha": 0.25,
+            "max_abs_dev": 0.2983870967741935
+          },
+          "n_spec_rounds": 86,
+          "n_target_rounds": 40,
+          "n_reprobe_rounds": 2,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 43,
+            "draft_forward_ms": 5.171429109759629,
+            "target_forward_ms": 6.041758484207094,
+            "switch_cost_ms": 11.213187593966722,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.001691368046274551
+        },
+        {
+          "seed": 1,
+          "lag": {
+            "degrade_lag_rounds": [
+              0,
+              0
+            ],
+            "restore_lag_rounds": [
+              1,
+              1
+            ],
+            "n_crossings": 4,
+            "n_switches": 4
+          },
+          "reprobe": {
+            "n_reprobes": 2,
+            "reprobe_alpha_mean": 0.5,
+            "reference_alpha": 0.7490196078431373,
+            "mean_abs_dev_from_ref_alpha": 0.5,
+            "max_abs_dev": 0.7490196078431373
+          },
+          "n_spec_rounds": 88,
+          "n_target_rounds": 40,
+          "n_reprobe_rounds": 2,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 42,
+            "draft_forward_ms": 5.32892910996452,
+            "target_forward_ms": 6.284479389432818,
+            "switch_cost_ms": 11.613408499397337,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.001721065735492516
+        },
+        {
+          "seed": 2,
+          "lag": {
+            "degrade_lag_rounds": [
+              0,
+              0
+            ],
+            "restore_lag_rounds": [
+              1,
+              1
+            ],
+            "n_crossings": 4,
+            "n_switches": 4
+          },
+          "reprobe": {
+            "n_reprobes": 2,
+            "reprobe_alpha_mean": 1.0,
+            "reference_alpha": 0.7813765182186235,
+            "mean_abs_dev_from_ref_alpha": 0.21862348178137647,
+            "max_abs_dev": 0.21862348178137647
+          },
+          "n_spec_rounds": 87,
+          "n_target_rounds": 40,
+          "n_reprobe_rounds": 2,
+          "switch_cost_probe": {
+            "proxy": "re-encode full prefix through both models (no KV cache to hand off)",
+            "prefix_len": 45,
+            "draft_forward_ms": 5.186799878720194,
+            "target_forward_ms": 6.049433420412242,
+            "switch_cost_ms": 11.236233299132437,
+            "reps": 10,
+            "nightjar_reference_ms": [
+              17.87,
+              102.03
+            ]
+          },
+          "switch_cost_share_of_wall": 0.0016510359143662653
+        }
+      ],
+      "wall_s_mean": {
+        "always_spec": 26.086131445365027,
+        "always_target": 30.363737290880334,
+        "circuit_breaker": 26.91069583365849
+      },
+      "pooled_always_spec_alpha": 0.7762610742786514
+    }
+  ]
+}
