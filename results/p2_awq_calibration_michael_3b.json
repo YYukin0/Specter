@@ -1,0 +1,132 @@
+{
+  "target_model": "Qwen/Qwen2.5-3B-Instruct",
+  "device": "mps",
+  "dtype": "torch.bfloat16",
+  "bits": 4,
+  "group_size": 128,
+  "n_grid": 20,
+  "seq_len": 512,
+  "seed": 0,
+  "baseline_perplexity": {
+    "natural": {
+      "perplexity": 10.486138343811035,
+      "n_windows": 40,
+      "n_tokens": 20440
+    },
+    "code": {
+      "perplexity": 3.077502965927124,
+      "n_windows": 40,
+      "n_tokens": 20440
+    }
+  },
+  "p2_2_cross_distribution": {
+    "calibrated_on_natural": {
+      "n_calib": 128,
+      "quant_seconds": 229.9443666934967,
+      "mean_layer_loss": 0.007527813861290472,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.239418983459473,
+          "n_windows": 40,
+          "n_tokens": 20440
+        },
+        "code": {
+          "perplexity": 3.2156152725219727,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    "calibrated_on_code": {
+      "n_calib": 128,
+      "quant_seconds": 259.20431303977966,
+      "mean_layer_loss": 0.007030374859563641,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.478218078613281,
+          "n_windows": 40,
+          "n_tokens": 20440
+        },
+        "code": {
+          "perplexity": 3.248944044113159,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    }
+  },
+  "p2_3_calibration_size_ablation": [
+    {
+      "n_calib": 4,
+      "quant_seconds": 95.27717995643616,
+      "mean_layer_loss": 0.00736327842989542,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.22036361694336,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    {
+      "n_calib": 8,
+      "quant_seconds": 96.19502091407776,
+      "mean_layer_loss": 0.007443918598226677,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.269963264465332,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    {
+      "n_calib": 16,
+      "quant_seconds": 104.75442290306091,
+      "mean_layer_loss": 0.007483906768862248,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.365909576416016,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    {
+      "n_calib": 32,
+      "quant_seconds": 122.21422004699707,
+      "mean_layer_loss": 0.007503172958321456,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.40150260925293,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    {
+      "n_calib": 64,
+      "quant_seconds": 156.95573687553406,
+      "mean_layer_loss": 0.0075196313450977045,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.29020881652832,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    },
+    {
+      "n_calib": 128,
+      "quant_seconds": 227.8414740562439,
+      "mean_layer_loss": 0.007527813861290472,
+      "perplexity": {
+        "natural": {
+          "perplexity": 11.239418983459473,
+          "n_windows": 40,
+          "n_tokens": 20440
+        }
+      }
+    }
+  ]
+}

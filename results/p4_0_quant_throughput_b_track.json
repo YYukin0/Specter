@@ -1,0 +1,615 @@
+{
+  "task": "P4.0/P4.1 (B track) -- quantization throughput curve + memory footprint",
+  "scope_note": "B's half only (quantization curve). A's speculative-decoding curve (TASKS.md M5 [A] line) is separate and not attempted here; the [A+B \u8054\u5408] merge/cross-over-point line is blocked on that and out of scope for this script.",
+  "schema_note": "Departs from project_plan_v9.md Appendix C1's batch-scan schema (draft_model_memory_mb / kv_cache_memory_mb / speedup_ratio_vs_no_spec), which is written for A's speculative-decoding curve. See module docstring for the field mapping rationale.",
+  "baseline_mlx_model": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+  "awq_model_dir": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+  "bench_config": {
+    "batch_sizes_requested": [
+      1,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "prompt_tokens": 128,
+    "generation_tokens": 128,
+    "n_trials": 3,
+    "seed": 123,
+    "prompt_source": "synthetic uniform-length random token ids (mx.random.randint), matching mlx_lm.benchmark's own methodology -- avoids ragged-padding noise across batch sizes; batch=1 point is the exception, see below",
+    "batch1_note": "batch=1 point reused as-is from P2.4's real-text-prompt measurement rather than re-run here, see module docstring",
+    "subprocess_timeout_s": 300
+  },
+  "platform": {
+    "machine": "arm64",
+    "processor": "arm",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O"
+  },
+  "points": [
+    {
+      "batch_size": 1,
+      "baseline": {
+        "status": "ok",
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 1,
+        "aggregate": {
+          "generation_tps": {
+            "mean": 15.625184524021469,
+            "std": 0.36383956417957325,
+            "n": 9
+          },
+          "prompt_tps": {
+            "mean": 67.69653117546046,
+            "std": 9.539011177434622,
+            "n": 9
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 6.187973836888889,
+            "std": 0.0004068117239842061,
+            "n": 9
+          }
+        },
+        "process_actual_rss_gb": 6.721404928,
+        "reused_from": "src/results/p2_4_mlx_awq_result.json",
+        "reuse_caveat": "real short text prompts (11-13 tokens), not this script's synthetic 128-token prompts; max_tokens=128 matches"
+      },
+      "awq": {
+        "status": "ok",
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 1,
+        "aggregate": {
+          "generation_tps": {
+            "mean": 57.109918558365266,
+            "std": 0.4540183923737672,
+            "n": 9
+          },
+          "prompt_tps": {
+            "mean": 151.7284218650879,
+            "std": 5.787831893246172,
+            "n": 9
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 1.6983009475555555,
+            "std": 0.000981870781818909,
+            "n": 9
+          }
+        },
+        "process_actual_rss_gb": 2.356412416,
+        "reused_from": "src/results/p2_4_mlx_awq_result.json",
+        "reuse_caveat": "real short text prompts (11-13 tokens), not this script's synthetic 128-token prompts; max_tokens=128 matches"
+      }
+    },
+    {
+      "batch_size": 4,
+      "baseline": {
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 4,
+        "runs": [
+          {
+            "prompt_tps": 636.052301900475,
+            "generation_tps": 60.619190994141924,
+            "peak_memory_gb": 6.43851398,
+            "wall_s": 9.245693582925014
+          },
+          {
+            "prompt_tps": 639.0537340947981,
+            "generation_tps": 59.95931693109861,
+            "peak_memory_gb": 6.43851398,
+            "wall_s": 9.334788667038083
+          },
+          {
+            "prompt_tps": 637.7349459902044,
+            "generation_tps": 61.086238662450995,
+            "peak_memory_gb": 6.43851398,
+            "wall_s": 9.178785374970175
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 60.55491552923051,
+            "std": 0.5662037165991994,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 637.6136606618259,
+            "std": 1.50438738443253,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 6.43851398,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 5.195841536,
+        "status": "ok"
+      },
+      "awq": {
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 4,
+        "runs": [
+          {
+            "prompt_tps": 586.8268354074683,
+            "generation_tps": 168.75666925492138,
+            "peak_memory_gb": 2.170056016,
+            "wall_s": 3.9003397499909624
+          },
+          {
+            "prompt_tps": 563.327414715056,
+            "generation_tps": 167.4671370951521,
+            "peak_memory_gb": 2.170056016,
+            "wall_s": 3.9597429579589516
+          },
+          {
+            "prompt_tps": 589.2745079828791,
+            "generation_tps": 171.23772787293674,
+            "peak_memory_gb": 2.170056016,
+            "wall_s": 3.852811750024557
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 169.1538447410034,
+            "std": 1.9164159200019726,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 579.8095860351344,
+            "std": 14.326348237684904,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 2.170056016,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 2.355298304,
+        "status": "ok"
+      }
+    },
+    {
+      "batch_size": 8,
+      "baseline": {
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 8,
+        "runs": [
+          {
+            "prompt_tps": 649.7223200167889,
+            "generation_tps": 120.6277093302357,
+            "peak_memory_gb": 6.568081844,
+            "wall_s": 10.053285333095118
+          },
+          {
+            "prompt_tps": 651.801895099358,
+            "generation_tps": 118.96940071667088,
+            "peak_memory_gb": 6.568081844,
+            "wall_s": 10.166564833954908
+          },
+          {
+            "prompt_tps": 650.3432587365968,
+            "generation_tps": 120.20373706795574,
+            "peak_memory_gb": 6.568081844,
+            "wall_s": 10.081713041989133
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 119.93361570495411,
+            "std": 0.8615225055204425,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 650.6224912842479,
+            "std": 1.0675374666780582,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 6.568081844,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 4.825874432,
+        "status": "ok"
+      },
+      "awq": {
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 8,
+        "runs": [
+          {
+            "prompt_tps": 598.0028113450338,
+            "generation_tps": 186.67635783449816,
+            "peak_memory_gb": 2.344417728,
+            "wall_s": 7.185202958993614
+          },
+          {
+            "prompt_tps": 589.6668842220022,
+            "generation_tps": 183.98174236470535,
+            "peak_memory_gb": 2.344417728,
+            "wall_s": 7.289527083048597
+          },
+          {
+            "prompt_tps": 581.8527488748401,
+            "generation_tps": 181.34488733633378,
+            "peak_memory_gb": 2.344417728,
+            "wall_s": 7.39359437499661
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 184.0009958451791,
+            "std": 2.665787395983042,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 589.8408148139587,
+            "std": 8.076435992187609,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 2.344417728,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 2.356690944,
+        "status": "ok"
+      }
+    },
+    {
+      "batch_size": 16,
+      "baseline": {
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 16,
+        "runs": [
+          {
+            "prompt_tps": 647.0982602732114,
+            "generation_tps": 144.76058355369562,
+            "peak_memory_gb": 6.64850106,
+            "wall_s": 17.288656415999867
+          },
+          {
+            "prompt_tps": 603.8038000572654,
+            "generation_tps": 147.87398387573924,
+            "peak_memory_gb": 6.64850106,
+            "wall_s": 17.215826208004728
+          },
+          {
+            "prompt_tps": 626.5926531400735,
+            "generation_tps": 148.97634315882843,
+            "peak_memory_gb": 6.64850106,
+            "wall_s": 16.990963499993086
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 147.20363686275442,
+            "std": 2.186362527219723,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 625.8315711568501,
+            "std": 21.657262192770858,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 6.64850106,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 4.495540224,
+        "status": "ok"
+      },
+      "awq": {
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 16,
+        "runs": [
+          {
+            "prompt_tps": 562.0341958618654,
+            "generation_tps": 224.4475226614142,
+            "peak_memory_gb": 2.424804176,
+            "wall_s": 12.741011125035584
+          },
+          {
+            "prompt_tps": 536.9806148339236,
+            "generation_tps": 221.28947059370392,
+            "peak_memory_gb": 2.424804176,
+            "wall_s": 13.039970167097636
+          },
+          {
+            "prompt_tps": 546.5941221688249,
+            "generation_tps": 222.86473584266255,
+            "peak_memory_gb": 2.424804176,
+            "wall_s": 12.907966334023513
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 222.86724303259356,
+            "std": 1.5790275267053824,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 548.5363109548713,
+            "std": 12.639206998122754,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 2.424804176,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 2.356641792,
+        "status": "ok"
+      }
+    },
+    {
+      "batch_size": 32,
+      "baseline": {
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 32,
+        "runs": [
+          {
+            "prompt_tps": 587.2783996734825,
+            "generation_tps": 243.58029552570457,
+            "peak_memory_gb": 7.056151313,
+            "wall_s": 23.73726175003685
+          },
+          {
+            "prompt_tps": 596.4140570489595,
+            "generation_tps": 239.17659774200047,
+            "peak_memory_gb": 7.036358634,
+            "wall_s": 23.940795083064586
+          },
+          {
+            "prompt_tps": 571.8846907283464,
+            "generation_tps": 237.47182945781833,
+            "peak_memory_gb": 7.056151347,
+            "wall_s": 24.35613883298356
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 240.0762409085078,
+            "std": 3.152040259246682,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 585.1923824835961,
+            "std": 12.39701794021785,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 7.049553764666666,
+            "std": 0.011427318363601138,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 4.854120448,
+        "status": "ok"
+      },
+      "awq": {
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 32,
+        "runs": [
+          {
+            "prompt_tps": 520.612521755255,
+            "generation_tps": 370.9776273640545,
+            "peak_memory_gb": 2.651348678,
+            "wall_s": 18.849094833014533
+          },
+          {
+            "prompt_tps": 533.9794901472435,
+            "generation_tps": 373.8814761267304,
+            "peak_memory_gb": 2.651348678,
+            "wall_s": 18.567619708017446
+          },
+          {
+            "prompt_tps": 541.7029672398726,
+            "generation_tps": 385.12532707616714,
+            "peak_memory_gb": 2.651348678,
+            "wall_s": 18.139255541027524
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 376.6614768556507,
+            "std": 7.472325931437009,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 532.0983263807904,
+            "std": 10.670323590316684,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 2.651348678,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 2.357067776,
+        "status": "ok"
+      }
+    },
+    {
+      "batch_size": 64,
+      "baseline": {
+        "label": "baseline_bf16",
+        "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+        "batch_size": 64,
+        "runs": [
+          {
+            "prompt_tps": 595.4335344923978,
+            "generation_tps": 249.13055298826205,
+            "peak_memory_gb": 7.428743394,
+            "wall_s": 46.535294791916385
+          },
+          {
+            "prompt_tps": 610.77538387208,
+            "generation_tps": 254.1978589654153,
+            "peak_memory_gb": 7.428743445,
+            "wall_s": 45.537322415970266
+          },
+          {
+            "prompt_tps": 600.2945251898577,
+            "generation_tps": 255.2138469456933,
+            "peak_memory_gb": 7.428743463,
+            "wall_s": 45.64075237500947
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 252.84741963312354,
+            "std": 3.258739194194633,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 602.1678145181119,
+            "std": 7.840599165735178,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 7.428743434,
+            "std": 3.579106059280634e-08,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 5.104467968,
+        "status": "ok"
+      },
+      "awq": {
+        "label": "awq_int4_g128",
+        "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+        "batch_size": 64,
+        "runs": [
+          {
+            "prompt_tps": 566.6868123125527,
+            "generation_tps": 401.32454819655794,
+            "peak_memory_gb": 3.033288847,
+            "wall_s": 34.757569624925964
+          },
+          {
+            "prompt_tps": 566.2750891902989,
+            "generation_tps": 399.7972203926473,
+            "peak_memory_gb": 3.033288847,
+            "wall_s": 34.84588816692121
+          },
+          {
+            "prompt_tps": 565.7448636542512,
+            "generation_tps": 400.6669394517478,
+            "peak_memory_gb": 3.033288847,
+            "wall_s": 34.81487137498334
+          }
+        ],
+        "aggregate": {
+          "generation_tps": {
+            "mean": 400.59623601365104,
+            "std": 0.7661147350551614,
+            "n": 3
+          },
+          "prompt_tps": {
+            "mean": 566.2355883857009,
+            "std": 0.4722150504716203,
+            "n": 3
+          },
+          "mlx_peak_memory_gb": {
+            "mean": 3.033288847,
+            "std": 0.0,
+            "n": 3
+          }
+        },
+        "process_actual_rss_gb": 2.356559872,
+        "status": "ok"
+      }
+    }
+  ],
+  "curve": [
+    {
+      "batch_size": 1,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 15.625184524021469,
+      "baseline_tps_std": 0.36383956417957325,
+      "baseline_peak_memory_gb": 6.187973836888889,
+      "awq_tps": 57.109918558365266,
+      "awq_tps_std": 0.4540183923737672,
+      "awq_peak_memory_gb": 1.6983009475555555,
+      "speedup_ratio_vs_baseline": 3.654991623975192
+    },
+    {
+      "batch_size": 4,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 60.55491552923051,
+      "baseline_tps_std": 0.5662037165991994,
+      "baseline_peak_memory_gb": 6.43851398,
+      "awq_tps": 169.1538447410034,
+      "awq_tps_std": 1.9164159200019726,
+      "awq_peak_memory_gb": 2.170056016,
+      "speedup_ratio_vs_baseline": 2.793395767505464
+    },
+    {
+      "batch_size": 8,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 119.93361570495411,
+      "baseline_tps_std": 0.8615225055204425,
+      "baseline_peak_memory_gb": 6.568081844,
+      "awq_tps": 184.0009958451791,
+      "awq_tps_std": 2.665787395983042,
+      "awq_peak_memory_gb": 2.344417728,
+      "speedup_ratio_vs_baseline": 1.5341903499168712
+    },
+    {
+      "batch_size": 16,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 147.20363686275442,
+      "baseline_tps_std": 2.186362527219723,
+      "baseline_peak_memory_gb": 6.64850106,
+      "awq_tps": 222.86724303259356,
+      "awq_tps_std": 1.5790275267053824,
+      "awq_peak_memory_gb": 2.424804176,
+      "speedup_ratio_vs_baseline": 1.5140063641252577
+    },
+    {
+      "batch_size": 32,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 240.0762409085078,
+      "baseline_tps_std": 3.152040259246682,
+      "baseline_peak_memory_gb": 7.049553764666666,
+      "awq_tps": 376.6614768556507,
+      "awq_tps_std": 7.472325931437009,
+      "awq_peak_memory_gb": 2.651348678,
+      "speedup_ratio_vs_baseline": 1.5689244193022625
+    },
+    {
+      "batch_size": 64,
+      "baseline_status": "ok",
+      "awq_status": "ok",
+      "baseline_tps": 252.84741963312354,
+      "baseline_tps_std": 3.258739194194633,
+      "baseline_peak_memory_gb": 7.428743434,
+      "awq_tps": 400.59623601365104,
+      "awq_tps_std": 0.7661147350551614,
+      "awq_peak_memory_gb": 3.033288847,
+      "speedup_ratio_vs_baseline": 1.5843398227868333
+    }
+  ]
+}

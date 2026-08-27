@@ -1,0 +1,255 @@
+{
+  "task": "P2.4 (Mac part) -- mlx_lm.awq cross-check",
+  "note": "This number is a free Mac-side cross-validation reference point only. It does NOT substitute for the cloud-stage LLM Compressor GPTQ comparison (project_plan_v9.md SS3 non-goal 5, ADR-004).",
+  "hf_source_model": "Qwen/Qwen2.5-3B-Instruct",
+  "baseline_mlx_model": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+  "quant_config": {
+    "bits": 4,
+    "group_size": 128,
+    "group_size_note": "overridden from mlx_lm.awq CLI default (64) to 128 to match P2.1's hand-written AWQ config for cross-experiment comparability",
+    "num_samples": 32,
+    "sequence_length": 256,
+    "n_grid": 20,
+    "seed": 123,
+    "calibration_set": "mlx_lm.quant.utils.load_data() source: mlx-lm's built-in calibration_data_v5_rc.txt, auto-downloaded to ~/.cache/mlx-lm/calibration_v5.txt from https://gist.githubusercontent.com/tristandruyen/9e207a95c7d75ddf37525d353e00659c/raw/571fda718462de863e5a0171078c175420c7649a/calibration_data_v5_rc.txt on first use; 32 random non-overlapping 256-token chunks drawn from it (sample count/length cut from the CLI's own defaults of 128/512, see AWQ_NUM_SAMPLES/AWQ_SEQUENCE_LENGTH comment above for why). NOT the C4/codeparrot set P2.1 used -- this is the tool's own calibration text, used as-is per the 'borrow the existing tool's own defaults' instruction.",
+    "quantize_wall_s": 532.0,
+    "quantize_wall_s_note": "measured from a separate standalone `--phase quantize` run right before this bench run; this run's own quantize step was skipped (0s) because the model directory already existed from that prior run -- see run_quantize()'s skip-if-exists check"
+  },
+  "bench_config": {
+    "prompts": [
+      "Write a Python function that returns the nth Fibonacci number.",
+      "Explain the difference between TCP and UDP in two sentences.",
+      "Summarize the plot of Romeo and Juliet in three sentences."
+    ],
+    "max_tokens": 128,
+    "n_runs_per_prompt": 3,
+    "batch_size": 1
+  },
+  "platform": {
+    "machine": "arm64",
+    "processor": "arm",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O"
+  },
+  "baseline_bf16": {
+    "label": "baseline_bf16",
+    "model_path": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+    "per_prompt": [
+      {
+        "prompt": "Write a Python function that returns the nth Fibonacci number.",
+        "runs": [
+          {
+            "wall_s": 8.368552459054627,
+            "prompt_tokens": 11,
+            "prompt_tps": 62.888407349971686,
+            "generation_tokens": 128,
+            "generation_tps": 15.800011518093772,
+            "mlx_peak_memory_gb": 6.187336848
+          },
+          {
+            "wall_s": 9.106620709062554,
+            "prompt_tokens": 11,
+            "prompt_tps": 46.279723841568845,
+            "generation_tokens": 128,
+            "generation_tps": 14.657849016128372,
+            "mlx_peak_memory_gb": 6.187648144
+          },
+          {
+            "wall_s": 8.42343391594477,
+            "prompt_tokens": 11,
+            "prompt_tps": 62.2598485544832,
+            "generation_tokens": 128,
+            "generation_tps": 15.709613763142412,
+            "mlx_peak_memory_gb": 6.187648144
+          }
+        ]
+      },
+      {
+        "prompt": "Explain the difference between TCP and UDP in two sentences.",
+        "runs": [
+          {
+            "wall_s": 8.393849709071219,
+            "prompt_tokens": 12,
+            "prompt_tps": 69.80735095639874,
+            "generation_tokens": 128,
+            "generation_tps": 15.754962977964583,
+            "mlx_peak_memory_gb": 6.187921044
+          },
+          {
+            "wall_s": 8.385879667010158,
+            "prompt_tokens": 12,
+            "prompt_tps": 70.0984053667824,
+            "generation_tokens": 128,
+            "generation_tps": 15.764391400473032,
+            "mlx_peak_memory_gb": 6.187921044
+          },
+          {
+            "wall_s": 8.395754917059094,
+            "prompt_tokens": 12,
+            "prompt_tps": 70.63736985986557,
+            "generation_tokens": 128,
+            "generation_tps": 15.739718424791166,
+            "mlx_peak_memory_gb": 6.187921044
+          }
+        ]
+      },
+      {
+        "prompt": "Summarize the plot of Romeo and Juliet in three sentences.",
+        "runs": [
+          {
+            "wall_s": 8.410951707977802,
+            "prompt_tokens": 13,
+            "prompt_tps": 76.16765380320228,
+            "generation_tokens": 128,
+            "generation_tps": 15.708021023368374,
+            "mlx_peak_memory_gb": 6.188456088
+          },
+          {
+            "wall_s": 8.404730791924521,
+            "prompt_tokens": 13,
+            "prompt_tps": 74.53357379082763,
+            "generation_tokens": 128,
+            "generation_tps": 15.736375952870073,
+            "mlx_peak_memory_gb": 6.188456088
+          },
+          {
+            "wall_s": 8.392194332904182,
+            "prompt_tokens": 13,
+            "prompt_tps": 76.59644705604383,
+            "generation_tokens": 128,
+            "generation_tps": 15.75571663936144,
+            "mlx_peak_memory_gb": 6.188456088
+          }
+        ]
+      }
+    ],
+    "aggregate": {
+      "generation_tps": {
+        "mean": 15.625184524021469,
+        "std": 0.36383956417957325,
+        "n": 9
+      },
+      "prompt_tps": {
+        "mean": 67.69653117546046,
+        "std": 9.539011177434622,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 6.187973836888889,
+        "std": 0.0004068117239842061,
+        "n": 9
+      }
+    },
+    "process_actual_rss_gb": 6.721404928
+  },
+  "awq_int4_g128": {
+    "label": "awq_int4_g128",
+    "model_path": "/Users/yyukin0/Documents/Specter/src/results/p2_4_awq_mlx_model",
+    "per_prompt": [
+      {
+        "prompt": "Write a Python function that returns the nth Fibonacci number.",
+        "runs": [
+          {
+            "wall_s": 2.389069000026211,
+            "prompt_tokens": 11,
+            "prompt_tps": 148.21402118924502,
+            "generation_tokens": 128,
+            "generation_tps": 57.5195039713525,
+            "mlx_peak_memory_gb": 1.697074476
+          },
+          {
+            "wall_s": 2.3784050829708576,
+            "prompt_tokens": 11,
+            "prompt_tps": 148.71153343164914,
+            "generation_tokens": 128,
+            "generation_tps": 57.707001042370194,
+            "mlx_peak_memory_gb": 1.697385772
+          },
+          {
+            "wall_s": 2.424076499999501,
+            "prompt_tokens": 11,
+            "prompt_tps": 148.47759837979962,
+            "generation_tokens": 128,
+            "generation_tps": 56.80360773928847,
+            "mlx_peak_memory_gb": 1.697385772
+          }
+        ]
+      },
+      {
+        "prompt": "Explain the difference between TCP and UDP in two sentences.",
+        "runs": [
+          {
+            "wall_s": 2.396518958033994,
+            "prompt_tokens": 12,
+            "prompt_tps": 146.81413326786105,
+            "generation_tokens": 128,
+            "generation_tps": 57.33527586378058,
+            "mlx_peak_memory_gb": 1.69810616
+          },
+          {
+            "wall_s": 2.4346709169913083,
+            "prompt_tokens": 12,
+            "prompt_tps": 147.9714043399525,
+            "generation_tokens": 128,
+            "generation_tps": 56.53941249615731,
+            "mlx_peak_memory_gb": 1.69810616
+          },
+          {
+            "wall_s": 2.4063704169820994,
+            "prompt_tokens": 12,
+            "prompt_tps": 147.16778544945907,
+            "generation_tokens": 128,
+            "generation_tps": 57.0090438846165,
+            "mlx_peak_memory_gb": 1.69810616
+          }
+        ]
+      },
+      {
+        "prompt": "Summarize the plot of Romeo and Juliet in three sentences.",
+        "runs": [
+          {
+            "wall_s": 2.4021460409276187,
+            "prompt_tokens": 13,
+            "prompt_tps": 158.9380493878123,
+            "generation_tokens": 128,
+            "generation_tps": 57.42377112933721,
+            "mlx_peak_memory_gb": 1.699514676
+          },
+          {
+            "wall_s": 2.4010496250120923,
+            "prompt_tokens": 13,
+            "prompt_tps": 159.4928128437782,
+            "generation_tokens": 128,
+            "generation_tps": 57.26435000734132,
+            "mlx_peak_memory_gb": 1.699514676
+          },
+          {
+            "wall_s": 2.4244362498866394,
+            "prompt_tokens": 13,
+            "prompt_tps": 159.76845849623433,
+            "generation_tokens": 128,
+            "generation_tps": 56.38730089104331,
+            "mlx_peak_memory_gb": 1.699514676
+          }
+        ]
+      }
+    ],
+    "aggregate": {
+      "generation_tps": {
+        "mean": 57.109918558365266,
+        "std": 0.4540183923737672,
+        "n": 9
+      },
+      "prompt_tps": {
+        "mean": 151.7284218650879,
+        "std": 5.787831893246172,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 1.6983009475555555,
+        "std": 0.000981870781818909,
+        "n": 9
+      }
+    },
+    "process_actual_rss_gb": 2.356412416
+  }
+}

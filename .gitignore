@@ -3,5 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 papers/*.pdf
+# scripts default their output here; the AUTHORITATIVE, committed results live in
+# the repo top-level results/. Early B-track evidence (p4_0 quant throughput,
+# p2_4 mlx AWQ cross-check, Michael's 3B AWQ calibration) was stranded here and
+# never entered git until it was copied up to results/ (see that dir).
 src/results/
 code/

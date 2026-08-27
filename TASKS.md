@@ -52,7 +52,7 @@
 ## M5 — Batch 交叉点 Mac 部分（支柱4前半）【A+B 分曲线】
 
 - [ ] **[A]** 投机解码吞吐曲线（batch ∈ {1,4,8,16,32,64}）
-- [x] **[B]** 量化吞吐曲线（同 batch 范围，用 B 自己的 AWQ 模型）—— `src/p4_quant_throughput_curve.py`，结果见 `src/results/p4_quant_throughput_result.json`；batch=1/4/8/16/32/64 全部测通，未触发 OOM
+- [x] **[B]** 量化吞吐曲线（同 batch 范围，用 B 自己的 AWQ 模型）—— `src/p4_quant_throughput_curve.py`，结果见 `results/p4_0_quant_throughput_b_track.json`（原 `src/results/p4_quant_throughput_result.json`，因 `src/results/` 被 gitignore 从未入库，2026-08-28 迁至顶层）；batch=1/4/8/16/32/64 全部测通，未触发 OOM
 - [x] **[A+B 各自]** 显存占用记录（各记自己那条曲线）—— 仅 B 这一半完成（随上一条一并记录）；A 那一半仍未开始（A 的 P1 尚未完成）
 - [ ] **[A+B 联合]** 合并两条曲线，标出交叉点，写 P4.1 记录 —— 阻塞于 A 的曲线未产出，不在此提交范围内
 
