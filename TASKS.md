@@ -19,9 +19,9 @@
 ## M1 — AWQ 量化基础（支柱2）【B】
 
 - [x] P2.0 激活统计采集 —— `src/awq_activation_stats.py` + `tests/test_awq_activation_stats.py`（6 测试）。对 Qwen2.5-1.5B-Instruct 196 个目标 Linear（28 层 × q/k/v/o/gate/up/down）挂 forward-pre-hook，24 条 prose+code 校准 prompt（截断 512 tok），逐输入通道存 `abs_mean` + `abs_max`（fp32 累加）。结果 `results/p2_0_activation_stats.pt`（逐层 per-channel 向量）+ `results/p2_0_activation_stats.json`（摘要）。关键发现：早层 `mlp.down_proj` 的 per-channel `abs_mean` max/median 比高达 ~7750（layer 1）、~3880（layer 2）、~1160（layer 26），少数输入通道极端主导——正是 AWQ 要保护的激活离群通道现象，坐实"逐通道缩放有东西可保护"。
-- [x] P2.1 逐通道缩放校准算法（第一版，P2.2/P2.3 待）—— `src/awq_scaling.py` + `tests/test_awq_scaling.py`（10 测试）。`fake_quantize_groupwise`（4-bit、group=128、非对称、**round→+zero→clamp→dequant** 顺序，单测钉死 clamp 在 round 之后）；`compute_scale` `s = act_scale**α / weight_scale**(1-α)`（clamp + `/sqrt(max·min)` 归一）；`search_scale` 在 α∈{0,0.1,…,1.0} ∪ {不缩放} 上按"该层输出 MSE = ‖fq(W·s)@(X/s)ᵀ − W@Xᵀ‖²"网格搜索，保留 best-of{缩放, 不缩放}。代表性 6 层（early/mid/late × v_proj/down_proj）结果：输出 MSE 改善 +14.8% ~ +71.0%（late 层收益最大），**layer 14 mlp.down_proj 网格打不过不缩放→回退 α=none（+0.0%）**（诚实记录，非 bug）；缩放变换数学恒等误差 ≤1.4e-4。结果 `results/p2_1_scaling_demo.json`。未做：perplexity/端到端、GPTQ 对比、跨分布(P2.2)、校准集消融(P2.3)、196 层全扫、真实 int4 打包（云端，风险B）。
-- [ ] P2.2 跨分布鲁棒性实验（AWQ vs GPTQ 矩阵）
-- [ ] P2.3 校准集大小消融
+- [x] P2.1 逐通道缩放校准算法（第一版 = `p2_1_scaling_demo.json`，6 层 MSE）+ **完整版（2026-08-28）**：`src/awq_quantize_model.py` + `tests/test_awq_quantize_model.py`（8 测试）。`capture_all_layer_inputs`（一次前向捕获全部 196 层输入激活，逐层封顶）+ `quantize_model`（逐层搜 α、原地写 fake-quant 权重、`best_alpha=None` 的层留 fp16 记 `fell_back`；`frozen_scales`/`scales_out` 支持幂等再应用）+ `summarize_records`。全模型跑：**192/196 层量化、4 层回退 fp16**（layer 13-14 mlp.down_proj、19-20 self_attn.o_proj），α 直方图集中在 0.3–0.6，逐层输出 MSE 改善中位数 ~+28%。结果 `results/p2_1_full_quant.json`。wikitext2 ppl 涨幅见 P2.3（fp16 12.18 → 4-bit ~13.25，+1.07，n_calib=32）。真实 int4 打包仍留云端。
+- [x] P2.2 跨分布鲁棒性实验（自研 AWQ 跨分布涨幅；无自研 GPTQ，那半留云端）—— `src/verify_p2_2_cross_distribution.py` + `src/awq_perplexity.py`（`eval_perplexity` 滑窗 ppl + `load_eval_corpus`）+ `tests/test_awq_perplexity.py`（5 测试）。矩阵 {calib=NL, calib=code} × {eval=wikitext2, eval=code}，n_calib=32，3 shuffle，mean±std。**代码语料用 mbpp 替代**（codeparrot/c4 本地缓存实际缺失，见坑17）。结果：fp16 wikitext2 12.18 / mbpp 3.11；eval=NL 同分布涨 +1.21、跨分布涨 +1.77（跨−同 = +0.56，区间不重叠）；eval=code 同/跨涨 +0.17/+0.19（跨−同 = +0.02，不显著）。**部分复现**：AWQ 跨分布鲁棒性在 code-eval 上成立、NL-eval 上不成立（+0.56 penalty 真实，反向复核确认两校准集 token Jaccard ~0.03 确实不重叠，penalty 部分来自 mbpp 语料过窄）。Michael 3B 那份方向参照（+0.24，前提不同）。结果 `results/p2_2_cross_distribution.json`。
+- [x] P2.3 校准集大小消融 —— `src/verify_p2_3_calib_size.py`。n_calib ∈ {4,8,16,32,64}（128 因内存去掉，需逐层量化重写），calib=NL 固定，3 shuffle，wikitext2 ppl。**踩坑16**：首轮因 `_quantize_fresh` 把捕获上限写死 512，n_calib≥8 喂进逐 bit 相同的池子、ppl 全等——已杀掉重跑（上限改成随 n_calib 线性增长，`capture_knob_actually_moved=true`）。结果（mean±std）：n_calib=4 → 13.57±0.39、8 → 13.45±0.02、16 → 13.32±0.06、32 → 13.25±0.02（最优）、64 → 13.31±0.02。knee(4−64) = +0.25 ppl，小样本方差 19×。**不干净复现** AWQ「小校准集就够」/ Michael 3B 平坦曲线：本机 1.5B fp16 下 n_calib=16–32（~500+ 捕获 tok/层）才稳，更小既偏高又方差大。如实记录（未调参）。结果 `results/p2_3_calib_size.json`。
 - [x] P2.4（Mac部分）`mlx_lm.awq` 交叉验证（可提前，不依赖 P1）——PR见下，云端GPTQ对比部分不在本次范围内
 
 ## M2 — 投机解码核心（支柱1）【A】
@@ -36,8 +36,8 @@
 
 ## M3 — AgentBench 评测（支柱3）【B】
 
-- [ ] P3.0 任务集改编（15-20个任务，含3-5个 held-out 标记；可提前，不依赖 P1）
-- [ ] P3.1 接受率对比实验（需 P1 完成）
+- [x] P3.0 任务集改编 —— `src/agentbench_os_tasks/`（框架取自 `origin/b/p3-0-agentbench-tasks`，逐文件审阅后作为新文件加入、不 merge）。**18 个任务 / 14 active / 4 held-out**（file_ops·code_refactor·cli_tools 各 5、multistep 3；held-out 每类一个）。tempfile sandbox、纯 stdlib、verify() 独立重算 ground truth、`verify_smoke_test.py` 对每个任务断言「未改动→FAIL / golden→PASS」（18/18 通过）。`tests/test_agentbench_os_tasks.py` 包装进 pytest。分支原版 15 个，本轮为满足 active≥12 加了 3 个 active 任务（_05）。
+- [~] P3.1 接受率对比实验（结构化 vs 自由文本 α）—— `src/verify_p3_1_alpha.py` + `tests/test_verify_p3_1_alpha.py`（FakeModel smoke）。结构化组 = 14 个非-held-out P3.0 任务描述，对照组 = `prompts.py` 前 5 条 prose，γ=3/temp=1.0/seed{0,1,2}。**代码 done，真实模型跑 + 结果 JSON 待**（不能与 P2.3 并发跑，排在其后）。
 
 ## M4 — 自适应控制器 Mac 部分（支柱5前半）【A】（完成：P5.0 + P5.1 + P5.3 done）
 
