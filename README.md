@@ -7,7 +7,6 @@
 - 项目计划（正式版）：[notes/project_plan_v9.md](notes/project_plan_v9.md) / [notes/Specter_Project_Plan_v9.pdf](notes/Specter_Project_Plan_v9.pdf)
 - 历次迭代记录：`notes/project_plan_v2.md` ~ `v8.md`
 - 参考文献索引：[papers/README.md](papers/README.md)（PDF 本体未纳入版本控制，用 `papers/download*.sh` 重新拉取）
-- 概念入门视频清单：[notes/概念学习资源_YouTube_2026-08-28.md](notes/概念学习资源_YouTube_2026-08-28.md)
 - 相关工作重叠评估：[notes/相关工作重新评估_2026-08-27.md](notes/相关工作重新评估_2026-08-27.md)
 - 事实核查记录：[notes/全面挑战_2026-08-27.md](notes/全面挑战_2026-08-27.md)
 
