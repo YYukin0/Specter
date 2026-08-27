@@ -1,0 +1,262 @@
+{
+  "task": "P5.0",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "temperature": 1.0,
+  "max_new_tokens": 48,
+  "n_prompts": 8,
+  "gammatune_config": {
+    "eta": 0.3,
+    "delta": 2,
+    "gmin": 1,
+    "gmax": 10,
+    "gamma_init": 3,
+    "gamma_bar_init": 3.0
+  },
+  "primary_metric": "mean_emitted_per_round = mean(n_accepted)+1 = tokens per target forward",
+  "wall_clock_caveat": "MPS, no KV cache -- wall-clock tok/s and speedup are unreliable here (P1.4: fixed-gamma speedup < 1.0 for gamma >= 5). Real throughput is P4/cloud.",
+  "measured_c": {
+    "c": 1.2799167532566855,
+    "t_draft_s": 0.005805029248585924,
+    "t_target_s": 0.007429954188410193,
+    "reps": 20,
+    "ctx_len": 64
+  },
+  "target_only_baseline": {
+    "tok_per_s_mean": 8.11278899416985,
+    "tok_per_s_std": 0.29604361194047374,
+    "per_seed": [
+      8.521309683490857,
+      7.987875136852264,
+      7.82918216216643
+    ]
+  },
+  "per_config": [
+    {
+      "config": "fixed_gamma_1",
+      "n_rounds_pooled": 608,
+      "mean_emitted_per_round": 1.7713809797701057,
+      "mean_emitted_per_round_std": 0.0028914166227739717,
+      "emitted_per_round_pooled_std": 0.4199428992232554,
+      "mean_accept_length": 0.7747061866626543,
+      "mean_accept_length_std": 0.002974155862048371,
+      "accept_length_pooled_std": 0.41779877075723953,
+      "accept_length_hist": {
+        "0": 137,
+        "1": 471
+      },
+      "tok_per_s_mean_CAVEAT": 9.930435506651783,
+      "tok_per_s_std": 0.28850552549748243,
+      "wall_speedup_vs_target_only_CAVEAT": 1.2240470587597139,
+      "per_seed_emitted_mean": [
+        1.7738693467336684,
+        1.7673267326732673,
+        1.7729468599033817
+      ],
+      "emitted_sum_pooled": 1077,
+      "gamma_sum_pooled": 608,
+      "cost_model_adjusted": {
+        "measured": 0.7769217451523546,
+        "c4": 0.35427631578947366,
+        "c7": 0.22142269736842105,
+        "c10": 0.1610346889952153
+      }
+    },
+    {
+      "config": "fixed_gamma_3",
+      "n_rounds_pooled": 379,
+      "mean_emitted_per_round": 2.802007252007252,
+      "mean_emitted_per_round_std": 0.09829172607840493,
+      "emitted_per_round_pooled_std": 1.2427692718818666,
+      "mean_accept_length": 1.8210955710955712,
+      "mean_accept_length_std": 0.11024413033195646,
+      "accept_length_pooled_std": 1.2424667354376024,
+      "accept_length_hist": {
+        "0": 90,
+        "1": 64,
+        "2": 51,
+        "3": 174
+      },
+      "tok_per_s_mean_CAVEAT": 9.722570838295942,
+      "tok_per_s_std": 0.31978861649741236,
+      "wall_speedup_vs_target_only_CAVEAT": 1.1984252080613633,
+      "per_seed_emitted_mean": [
+        2.9401709401709404,
+        2.746153846153846,
+        2.7196969696969697
+      ],
+      "emitted_sum_pooled": 1060,
+      "gamma_sum_pooled": 1137,
+      "cost_model_adjusted": {
+        "measured": 0.6534658348334279,
+        "c4": 0.3995476818695816,
+        "c7": 0.2796833773087071,
+        "c10": 0.21514105946823625
+      }
+    },
+    {
+      "config": "fixed_gamma_5",
+      "n_rounds_pooled": 309,
+      "mean_emitted_per_round": 3.492286459019754,
+      "mean_emitted_per_round_std": 0.04898719655572402,
+      "emitted_per_round_pooled_std": 1.9385626522858337,
+      "mean_accept_length": 2.5247135946736177,
+      "mean_accept_length_std": 0.05618652432653158,
+      "accept_length_pooled_std": 1.950079212701171,
+      "accept_length_hist": {
+        "0": 68,
+        "1": 55,
+        "2": 35,
+        "3": 37,
+        "4": 26,
+        "5": 88
+      },
+      "tok_per_s_mean_CAVEAT": 9.48494013610429,
+      "tok_per_s_std": 0.11675881343674423,
+      "wall_speedup_vs_target_only_CAVEAT": 1.1691343313526974,
+      "per_seed_emitted_mean": [
+        3.4757281553398056,
+        3.4423076923076925,
+        3.5588235294117645
+      ],
+      "emitted_sum_pooled": 1079,
+      "gamma_sum_pooled": 1545,
+      "cost_model_adjusted": {
+        "measured": 0.5560365262919218,
+        "c4": 0.38798993167925205,
+        "c7": 0.290992448759439,
+        "c10": 0.23279395900755123
+      }
+    },
+    {
+      "config": "fixed_gamma_7",
+      "n_rounds_pooled": 291,
+      "mean_emitted_per_round": 3.6738071114970814,
+      "mean_emitted_per_round_std": 0.012580111091807844,
+      "emitted_per_round_pooled_std": 2.544440914626607,
+      "mean_accept_length": 2.7152097030516487,
+      "mean_accept_length_std": 0.021524037191146993,
+      "accept_length_pooled_std": 2.549392799131775,
+      "accept_length_hist": {
+        "0": 75,
+        "1": 56,
+        "2": 35,
+        "3": 27,
+        "4": 14,
+        "5": 25,
+        "6": 11,
+        "7": 48
+      },
+      "tok_per_s_mean_CAVEAT": 8.102013706903092,
+      "tok_per_s_std": 0.028178348792428188,
+      "wall_speedup_vs_target_only_CAVEAT": 0.9986718146774799,
+      "per_seed_emitted_mean": [
+        3.6666666666666665,
+        3.663265306122449,
+        3.6914893617021276
+      ],
+      "emitted_sum_pooled": 1069,
+      "gamma_sum_pooled": 2037,
+      "cost_model_adjusted": {
+        "measured": 0.44366419310390626,
+        "c4": 0.33395813808184943,
+        "c7": 0.26239567992145313,
+        "c10": 0.21609055993531434
+      }
+    },
+    {
+      "config": "gammatune",
+      "n_rounds_pooled": 358,
+      "mean_emitted_per_round": 2.9385223334114365,
+      "mean_emitted_per_round_std": 0.004186746784283408,
+      "emitted_per_round_pooled_std": 1.8645832016570087,
+      "mean_accept_length": 1.949589055182112,
+      "mean_accept_length_std": 0.007693626845428268,
+      "accept_length_pooled_std": 1.8649179382451062,
+      "accept_length_hist": {
+        "0": 98,
+        "1": 71,
+        "2": 70,
+        "3": 60,
+        "4": 22,
+        "5": 21,
+        "6": 7,
+        "7": 4,
+        "8": 2,
+        "9": 2,
+        "10": 1
+      },
+      "tok_per_s_mean_CAVEAT": 10.23916716119868,
+      "tok_per_s_std": 0.019624831952997822,
+      "wall_speedup_vs_target_only_CAVEAT": 1.2621019933535709,
+      "per_seed_emitted_mean": [
+        2.9327731092436973,
+        2.9401709401709404,
+        2.942622950819672
+      ],
+      "emitted_sum_pooled": 1052,
+      "gamma_sum_pooled": 1222,
+      "gamma_trace_stats": {
+        "mean": 3.4134078212290504,
+        "std": 1.9061907688082182,
+        "min": 1,
+        "max": 10,
+        "hist": {
+          "1": 51,
+          "2": 69,
+          "3": 106,
+          "4": 44,
+          "5": 44,
+          "6": 15,
+          "7": 16,
+          "8": 5,
+          "9": 3,
+          "10": 5
+        },
+        "frac_at_gamma_max": 0.013966480446927373,
+        "n_rounds": 358
+      },
+      "cost_model_adjusted": {
+        "measured": 0.6261010331857354,
+        "c4": 0.39638281838733985,
+        "c7": 0.2821888412017167,
+        "c10": 0.21907538525614328
+      }
+    }
+  ],
+  "verdict": {
+    "best_fixed_config": "fixed_gamma_7",
+    "gammatune_mean_emitted_per_round": [
+      2.9385223334114365,
+      0.004186746784283408
+    ],
+    "best_fixed_mean_emitted_per_round": [
+      3.6738071114970814,
+      0.012580111091807844
+    ],
+    "within_1std": false,
+    "verdict": "GammaTune 2.939 +/- 0.004 is below best fixed fixed_gamma_7 3.674 +/- 0.013 with disjoint +/-1 std intervals. On this model pair / prompt set GammaTune does NOT beat fixed gamma=7. Likely cause (sec 9.6 pitfall 9): alpha is stable and accept-length variance is low here, so there is little for an adaptive controller to exploit; GammaTune's paper also reports only ~1.15x and limited gains in low-variance regimes."
+  },
+  "cost_model_supplement": {
+    "c_values_used": {
+      "measured": 1.28,
+      "c4": 4.0,
+      "c7": 7.0,
+      "c10": 10.0
+    },
+    "metric": "tokens per unit (c + gamma) cost = sum(emitted) / (n_rounds*c + sum(gamma))",
+    "per_c": {
+      "measured": "c=1.28: GammaTune 0.6261 vs best fixed fixed_gamma_1 0.7769 (-19.4%); GammaTune ahead of fixed gamma in {5,7}",
+      "c4": "c=4.0: GammaTune 0.3964 vs best fixed fixed_gamma_3 0.3995 (-0.8%); GammaTune ahead of fixed gamma in {1,5,7}",
+      "c7": "c=7.0: GammaTune 0.2822 vs best fixed fixed_gamma_5 0.2910 (-3.0%); GammaTune ahead of fixed gamma in {1,3,7}",
+      "c10": "c=10.0: GammaTune 0.2191 vs best fixed fixed_gamma_5 0.2328 (-5.9%); GammaTune ahead of fixed gamma in {1,3,7}"
+    },
+    "measured_c_caveat": "The measured c on this 0.5B/1.5B MPS setup is dominated by fixed kernel-launch overhead and understates the true compute ratio (~3x by params). The c in {4,7,10} rows -- the 'typical 4-10' range the plan quotes for real deployments -- are the representative ones.",
+    "reading": "For c in {4,7,10}, GammaTune lands in the top cluster -- within a few percent of the best fixed gamma at every c, ahead of the extremes (small gamma wastes target forwards, large gamma wastes draft forwards), roughly tied with the mid values. It does not clearly *win* here (alpha is too stable, pitfall 9), but landing near-optimal without knowing the workload in advance is the point; the raw primary metric, having no draft-cost term, cannot show even that. Real confirmation needs KV-cache wall-clock (P4/cloud)."
+  }
+}

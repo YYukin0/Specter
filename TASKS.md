@@ -39,11 +39,14 @@
 - [ ] P3.0 任务集改编（15-20个任务，含3-5个 held-out 标记；可提前，不依赖 P1）
 - [ ] P3.1 接受率对比实验（需 P1 完成）
 
-## M4 — 自适应控制器 Mac 部分（支柱5前半）【A】
+## M4 — 自适应控制器 Mac 部分（支柱5前半）【A】（部分完成：P5.0 + P5.1 done，P5.3 未做）
 
-- [ ] P5.0 GammaTune 算法实现
-- [ ] P5.1 波动场景鲁棒性测试
-- [ ] P5.3 Batch-aware 熔断器（含周期性重探测机制）
+> 用户 2026-08-28 继续 Track A（Michael 停更）。直接 commit 到 `main`，不开分支/PR。模型对沿用 draft=Qwen2.5-0.5B-Instruct / target=Qwen2.5-1.5B-Instruct。GammaTune 超参数用论文默认值写死不调参（`GammaTuneConfig`，§9.6 风险1）。
+
+- [x] P5.0 GammaTune 算法实现 —— `src/gammatune.py`：`gammatune_update` 纯函数复现附录 A.2 三轮算例（`A=[3,2,3] → (γ,γ̄)=(5,3.0)/(3,2.7)/(5,2.7)`，单测 `tests/test_gammatune.py`）；`gammatune_generate` 复用 `speculative_step` 不重写 rejection sampling，块内 EOS 截断照坑13，`carry_state=(γ,γ̄)` 支持跨 prompt 传状态。实验 `src/verify_gammatune.py`，结果 `results/p5_0_gammatune.json`：8 prompt × seed{0,1,2}，采样 temp=1.0，GammaTune vs 固定 γ∈{1,3,5,7}。**主指标 `mean_emitted_per_round`：GammaTune 2.94±0.00 < 最优固定 γ=7 的 3.67±0.01（区间不重叠）——在这对模型/这批 prompt 上 GammaTune 未跑赢固定 γ**，归因坑9（α≈0.79 稳定、accept 长度方差不足）+ 新发现坑14（该指标对 γ 单调、无 draft 代价项，结构上偏袒大 γ）。γ 轨迹健康（均值 3.41，落 γ_max 仅 1.4%）。成本模型次级分析（`sum(emitted)/(n·c+Σγ)`，实测 c≈1.26 + 文献 c∈{4,7,10}）：GammaTune 落最优簇内（差 0.8%/3.0%/5.9%）、稳优于极端 γ=1/γ=7。
+- [x] P5.1 波动场景鲁棒性测试 —— `src/nonstationary_prompts.py`：段 A 8 条代码/结构化 + 段 B 8 条开放聊天，序列 `A_to_B` / `A_to_B_to_A` / `ABAB`，控制器状态用 `carry_state` 跨 prompt 连续。实验 `src/verify_nonstationary.py`，结果 `results/p5_1_nonstationary.json`，≥3 seed。**三条序列主指标 GammaTune 均落后最优固定 γ=7**（A→B 2.86±0.03 vs 3.81、A→B→A 3.09±0.07 vs 4.09、ABAB 2.82±0.32 vs 3.81，区间不重叠）——**复现坑9 / 论文 Limitations**：历史依赖的控制器在这种切换频率下收益打折，不算失败，是 P5.3 需要更强场景感知的证据。段内行为符合预期：段 A（代码，高 α）emitted≈3.5–3.8、段 B（聊天，低 α）≈2.3；ABAB 高频切换使 GammaTune 方差明显放大（std 0.32 vs 其它序列 <0.07）。γ 轨迹逐 seed 存进 JSON。
+- [ ] P5.3 Batch-aware 熔断器（含周期性重探测机制）—— 本次未做，见 `notes/M4-P5.3-Batch熔断器任务prompt_2026-08-28.md`（决策：P5.3 与 GammaTune 关注点正交，且依赖 P4 batch 曲线，单独会话做）
+- 顺带记录新坑：`notes/project_plan_v9.md` §9.2 坑14（硬件无关主指标 `emitted_per_round` 对 γ 单调、无 draft 代价项，评自适应控制/熔断收益必须用成本模型或带 KV cache 墙钟）
 
 ## M5 — Batch 交叉点 Mac 部分（支柱4前半）【A+B 分曲线】
 
