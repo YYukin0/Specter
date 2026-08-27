@@ -18,8 +18,8 @@
 
 ## M1 — AWQ 量化基础（支柱2）【B】
 
-- [ ] P2.0 激活统计采集
-- [ ] P2.1 逐通道缩放校准算法
+- [x] P2.0 激活统计采集 —— `src/awq_activation_stats.py` + `tests/test_awq_activation_stats.py`（6 测试）。对 Qwen2.5-1.5B-Instruct 196 个目标 Linear（28 层 × q/k/v/o/gate/up/down）挂 forward-pre-hook，24 条 prose+code 校准 prompt（截断 512 tok），逐输入通道存 `abs_mean` + `abs_max`（fp32 累加）。结果 `results/p2_0_activation_stats.pt`（逐层 per-channel 向量）+ `results/p2_0_activation_stats.json`（摘要）。关键发现：早层 `mlp.down_proj` 的 per-channel `abs_mean` max/median 比高达 ~7750（layer 1）、~3880（layer 2）、~1160（layer 26），少数输入通道极端主导——正是 AWQ 要保护的激活离群通道现象，坐实"逐通道缩放有东西可保护"。
+- [x] P2.1 逐通道缩放校准算法（第一版，P2.2/P2.3 待）—— `src/awq_scaling.py` + `tests/test_awq_scaling.py`（10 测试）。`fake_quantize_groupwise`（4-bit、group=128、非对称、**round→+zero→clamp→dequant** 顺序，单测钉死 clamp 在 round 之后）；`compute_scale` `s = act_scale**α / weight_scale**(1-α)`（clamp + `/sqrt(max·min)` 归一）；`search_scale` 在 α∈{0,0.1,…,1.0} ∪ {不缩放} 上按"该层输出 MSE = ‖fq(W·s)@(X/s)ᵀ − W@Xᵀ‖²"网格搜索，保留 best-of{缩放, 不缩放}。代表性 6 层（early/mid/late × v_proj/down_proj）结果：输出 MSE 改善 +14.8% ~ +71.0%（late 层收益最大），**layer 14 mlp.down_proj 网格打不过不缩放→回退 α=none（+0.0%）**（诚实记录，非 bug）；缩放变换数学恒等误差 ≤1.4e-4。结果 `results/p2_1_scaling_demo.json`。未做：perplexity/端到端、GPTQ 对比、跨分布(P2.2)、校准集消融(P2.3)、196 层全扫、真实 int4 打包（云端，风险B）。
 - [ ] P2.2 跨分布鲁棒性实验（AWQ vs GPTQ 矩阵）
 - [ ] P2.3 校准集大小消融
 - [x] P2.4（Mac部分）`mlx_lm.awq` 交叉验证（可提前，不依赖 P1）——PR见下，云端GPTQ对比部分不在本次范围内
