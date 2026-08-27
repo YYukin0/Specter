@@ -1,0 +1,76 @@
+{
+  "draft_model": "mlx-community/Qwen2.5-0.5B-Instruct-bf16",
+  "target_model": "mlx-community/Qwen2.5-3B-Instruct-bf16",
+  "num_draft_tokens": 4,
+  "vocab_match": true,
+  "per_prompt": [
+    {
+      "prompt": "Explain in two sentences why the sky is blue.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 23,
+      "non_draft_events": 17,
+      "num_proposed_estimate": 68,
+      "alpha": 0.3382352941176471
+    },
+    {
+      "prompt": "Write a short haiku about autumn.",
+      "tokens_generated": 21,
+      "accepted_from_draft": 13,
+      "non_draft_events": 8,
+      "num_proposed_estimate": 32,
+      "alpha": 0.40625
+    },
+    {
+      "prompt": "What are three tips for staying focused while studying?",
+      "tokens_generated": 40,
+      "accepted_from_draft": 28,
+      "non_draft_events": 12,
+      "num_proposed_estimate": 48,
+      "alpha": 0.5833333333333334
+    },
+    {
+      "prompt": "Summarize the plot of Cinderella in one paragraph.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 27,
+      "non_draft_events": 13,
+      "num_proposed_estimate": 52,
+      "alpha": 0.5192307692307693
+    },
+    {
+      "prompt": "Give me a recipe idea for a quick weeknight dinner.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 24,
+      "non_draft_events": 16,
+      "num_proposed_estimate": 64,
+      "alpha": 0.375
+    },
+    {
+      "prompt": "Write a Python function that returns the nth Fibonacci number.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 32,
+      "non_draft_events": 8,
+      "num_proposed_estimate": 32,
+      "alpha": 1.0
+    },
+    {
+      "prompt": "Fix the bug: `def add(a, b): return a - b` should add two numbers.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 30,
+      "non_draft_events": 10,
+      "num_proposed_estimate": 40,
+      "alpha": 0.75
+    },
+    {
+      "prompt": "Write a bash one-liner to find all .txt files modified in the last 24 hours.",
+      "tokens_generated": 40,
+      "accepted_from_draft": 31,
+      "non_draft_events": 9,
+      "num_proposed_estimate": 36,
+      "alpha": 0.8611111111111112
+    }
+  ],
+  "total_accepted": 208,
+  "total_proposed_estimate": 372,
+  "overall_alpha": 0.5591397849462365,
+  "note": "alpha here is derived from mlx-lm's from_draft flag, not directly comparable bit-for-bit to the HF greedy-verification harness (different framework, same bf16 precision) -- it is a magnitude sanity check only, per project_plan_v9.md \u00a79.6."
+}

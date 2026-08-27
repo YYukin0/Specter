@@ -1,0 +1,70 @@
+{
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-3B-Instruct",
+  "gamma": 4,
+  "max_new_tokens_per_prompt": 40,
+  "vocab_match": true,
+  "per_prompt": [
+    {
+      "prompt": "Explain in two sentences why the sky is blue.",
+      "total_proposed": 38,
+      "total_accepted": 20,
+      "alpha": 0.5263157894736842,
+      "generated_tokens": 40
+    },
+    {
+      "prompt": "Write a short haiku about autumn.",
+      "total_proposed": 36,
+      "total_accepted": 23,
+      "alpha": 0.6388888888888888,
+      "generated_tokens": 41
+    },
+    {
+      "prompt": "What are three tips for staying focused while studying?",
+      "total_proposed": 36,
+      "total_accepted": 27,
+      "alpha": 0.75,
+      "generated_tokens": 40
+    },
+    {
+      "prompt": "Summarize the plot of Cinderella in one paragraph.",
+      "total_proposed": 37,
+      "total_accepted": 23,
+      "alpha": 0.6216216216216216,
+      "generated_tokens": 41
+    },
+    {
+      "prompt": "Give me a recipe idea for a quick weeknight dinner.",
+      "total_proposed": 37,
+      "total_accepted": 23,
+      "alpha": 0.6216216216216216,
+      "generated_tokens": 41
+    },
+    {
+      "prompt": "Write a Python function that returns the nth Fibonacci number.",
+      "total_proposed": 34,
+      "total_accepted": 32,
+      "alpha": 0.9411764705882353,
+      "generated_tokens": 41
+    },
+    {
+      "prompt": "Fix the bug: `def add(a, b): return a - b` should add two numbers.",
+      "total_proposed": 36,
+      "total_accepted": 27,
+      "alpha": 0.75,
+      "generated_tokens": 41
+    },
+    {
+      "prompt": "Write a bash one-liner to find all .txt files modified in the last 24 hours.",
+      "total_proposed": 35,
+      "total_accepted": 28,
+      "alpha": 0.8,
+      "generated_tokens": 41
+    }
+  ],
+  "total_accepted": 203,
+  "total_proposed": 289,
+  "overall_alpha": 0.7024221453287197,
+  "gate_tier": "PASS",
+  "conclusion": "alpha >= 0.65 -- proceed to P1.1 normally."
+}

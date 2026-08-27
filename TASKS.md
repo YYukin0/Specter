@@ -12,8 +12,8 @@
 
 ## M0 — 迁移 + 复核 P1.0（阶段0，已完成，待收尾）
 
-- [ ] **[A+B]** 把 `src/gate_p1_0.py`、`gate_p1_0_mlx_crosscheck.py`、`prompts.py`、`results/*.json` 迁移进本仓库
-- [ ] **[B]** 通读 `gate_p1_0.py` 核心逻辑，确认无假阳性风险（如两条推理路径共享缓存导致"殊途同归"）
+- [x] **[A+B]** 把 `src/gate_p1_0.py`、`gate_p1_0_mlx_crosscheck.py`、`prompts.py`、`results/*.json` 迁移进本仓库 —— 结果文件改名为 `results/p1_0_gate_result_b_track.json`、`results/p1_0_mlx_crosscheck_result.json`（顶层 `results/p1_0_gate_result.json` 是 Michael 用 `scripts/p1_acceptance.py` 等脚本产出的另一份 P1.0 证据，target 用的是 Qwen2.5-1.5B、alpha=0.7685，和这里 B 用 3B target 跑出的 0.7024 是两份独立结果，不能同名覆盖）
+- [x] **[B]** 通读 `gate_p1_0.py` 核心逻辑，确认无假阳性风险（如两条推理路径共享缓存导致"殊途同归"）—— draft_model/target_model 是两个独立加载的 `AutoModelForCausalLM` 实例（不同尺寸，不可能共享权重），target 侧每轮对 `candidate`（context+draft_tokens）做一次完整前向重新计算 logits，没有向 draft_model 传入或复用任何 `past_key_values`，两条路径之间没有缓存共享，未发现假阳性风险
 - [ ] **[A+B]** 双方确认 P1.0 结果（`overall_alpha=0.7024`, PASS）可作为阶段0完成依据，正式进入阶段1/2
 
 ## M1 — AWQ 量化基础（支柱2）【B】

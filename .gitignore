@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 papers/*.pdf
 src/results/
+code/
