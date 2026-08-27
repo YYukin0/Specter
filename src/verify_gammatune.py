@@ -286,9 +286,17 @@ def main():
     ap.add_argument("--max-new-tokens", type=int, default=48)
     ap.add_argument("--smoke", action="store_true",
                     help="1 seed, 2 prompts, 16 tokens -- just checks the pipeline runs")
+    ap.add_argument("--draft", default=DRAFT_MODEL_NAME,
+                    help="override the draft model (e.g. P5.0/P5.1 side experiments); "
+                         "the mainline default is left in place")
+    ap.add_argument("--target", default=TARGET_MODEL_NAME, help="override the target model")
+    ap.add_argument("--results-path", default=str(RESULTS_PATH),
+                    help="where to write the JSON (so a non-default pair does not clobber p5_0)")
     args = ap.parse_args()
 
     global SEEDS
+    draft_name, target_name = args.draft, args.target
+    results_path = Path(args.results_path)
     prompts_used = PROMPTS
     if args.smoke:
         SEEDS = [0]
@@ -297,14 +305,14 @@ def main():
         # shrink the module-level PROMPTS reference the helpers read
         PROMPTS[:] = prompts_used
 
-    print(f"draft  = {DRAFT_MODEL_NAME}")
-    print(f"target = {TARGET_MODEL_NAME}")
+    print(f"draft  = {draft_name}")
+    print(f"target = {target_name}")
     print(f"fixed gammas = {FIXED_GAMMAS}, seeds = {SEEDS}, temperature = {TEMPERATURE}, "
           f"max_new_tokens = {args.max_new_tokens}")
     print(f"GammaTune config = {CONFIG}\n")
 
-    draft_model, _ = load_model_and_tokenizer(DRAFT_MODEL_NAME)
-    target_model, tokenizer = load_model_and_tokenizer(TARGET_MODEL_NAME)
+    draft_model, _ = load_model_and_tokenizer(draft_name)
+    target_model, tokenizer = load_model_and_tokenizer(target_name)
 
     print("-- measuring c = T_target / T_draft --", flush=True)
     c_meas = measure_c(draft_model, target_model, tokenizer)
@@ -337,9 +345,10 @@ def main():
     cost_supp = _cost_model_supplement(rows, c_meas["c"])
 
     result = {
-        "task": "P5.0",
-        "draft_model": DRAFT_MODEL_NAME,
-        "target_model": TARGET_MODEL_NAME,
+        "task": "P5.0" if (draft_name == DRAFT_MODEL_NAME and target_name == TARGET_MODEL_NAME)
+                else "P5.0-style run on a non-default model pair (side experiment)",
+        "draft_model": draft_name,
+        "target_model": target_name,
         "seeds": SEEDS,
         "temperature": TEMPERATURE,
         "max_new_tokens": args.max_new_tokens,
@@ -354,8 +363,8 @@ def main():
         "verdict": verdict,
         "cost_model_supplement": cost_supp,
     }
-    RESULTS_PATH.parent.mkdir(exist_ok=True)
-    RESULTS_PATH.write_text(json.dumps(result, indent=2))
+    results_path.parent.mkdir(exist_ok=True)
+    results_path.write_text(json.dumps(result, indent=2))
 
     print("=" * 68)
     print("config            : emitted/round (mean+/-std) : accept_len : tok/s(caveat)")
@@ -366,7 +375,7 @@ def main():
     print(f"\nSUPPLEMENT (cost model, does not change the criterion):")
     for k, line in cost_supp["per_c"].items():
         print(f"  {line}")
-    print(f"\nwritten to {RESULTS_PATH}")
+    print(f"\nwritten to {results_path}")
     print("=" * 68)
 
 

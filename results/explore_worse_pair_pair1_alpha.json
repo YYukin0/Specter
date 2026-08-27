@@ -1,0 +1,104 @@
+{
+  "experiment": "side experiment: acceptance-rate variance vs adaptivity payoff (not a plan P-number)",
+  "pair_tag": "pair1_base0.5B_1.5Bi",
+  "draft_model": "Qwen/Qwen2.5-0.5B",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "mainline_pair": [
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct"
+  ],
+  "mainline_reference": {
+    "alpha": 0.79,
+    "accept_len_std_by_gamma": {
+      "1": 0.42,
+      "3": 1.24,
+      "5": 1.95,
+      "7": 2.55,
+      "10": 3.24
+    },
+    "p5_0_verdict": "GammaTune mean_emitted_per_round 2.94 vs best fixed gamma=7 3.67 (disjoint +/-1 std) -- GammaTune lost by ~20% on the primary metric; cost-model supplement put it within the optimal cluster (0.8-5.9%)."
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "temperature": 1.0,
+  "max_new_tokens": 48,
+  "n_prompts": 8,
+  "per_gamma": [
+    {
+      "gamma": 1,
+      "alpha_mean": 0.6653605075480075,
+      "alpha_std_across_seeds": 0.00692234200893681,
+      "accept_len_mean": 0.6858974358974359,
+      "accept_len_pooled_std": 0.4641574553174372,
+      "accept_len_hist": {
+        "0": 196,
+        "1": 428
+      },
+      "n_rounds_pooled": 624,
+      "mainline_accept_len_std": 0.42
+    },
+    {
+      "gamma": 3,
+      "alpha_mean": 0.7001913419620602,
+      "alpha_std_across_seeds": 0.026597899965889273,
+      "accept_len_mean": 1.5491606714628297,
+      "accept_len_pooled_std": 1.27815271211215,
+      "accept_len_hist": {
+        "0": 136,
+        "1": 69,
+        "2": 59,
+        "3": 153
+      },
+      "n_rounds_pooled": 417,
+      "mainline_accept_len_std": 1.24
+    },
+    {
+      "gamma": 5,
+      "alpha_mean": 0.6861991153810737,
+      "alpha_std_across_seeds": 0.016809772448193122,
+      "accept_len_mean": 1.9248554913294798,
+      "accept_len_pooled_std": 1.9053061310733463,
+      "accept_len_hist": {
+        "0": 114,
+        "1": 74,
+        "2": 38,
+        "3": 34,
+        "4": 16,
+        "5": 70
+      },
+      "n_rounds_pooled": 346,
+      "mainline_accept_len_std": 1.95
+    },
+    {
+      "gamma": 7,
+      "alpha_mean": 0.6857851773872818,
+      "alpha_std_across_seeds": 0.0215578533002544,
+      "accept_len_mean": 2.175548589341693,
+      "accept_len_pooled_std": 2.4534342119959227,
+      "accept_len_hist": {
+        "0": 114,
+        "1": 61,
+        "2": 41,
+        "3": 20,
+        "4": 15,
+        "5": 19,
+        "6": 7,
+        "7": 42
+      },
+      "n_rounds_pooled": 319,
+      "mainline_accept_len_std": 2.55
+    }
+  ],
+  "reading": {
+    "alpha_g3": 0.7001913419620602,
+    "accept_len_std_g3": 1.27815271211215,
+    "accept_len_std_g5": 1.9053061310733463,
+    "mainline_alpha": 0.79,
+    "recommend_switch_to_pair2": true,
+    "reading": "WEAK: alpha is still >= 0.70 and variance is not clearly larger than mainline. This pair is not meaningfully worse-matched; re-run with --pair2."
+  },
+  "_note": "reconstructed from run log; original file was overwritten by the pair 2 run before src/explore_worse_pair.py was fixed to use pair-tagged output paths"
+}

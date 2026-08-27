@@ -1,0 +1,103 @@
+{
+  "experiment": "side experiment: acceptance-rate variance vs adaptivity payoff (not a plan P-number)",
+  "pair_tag": "pair2_0.5Bi_3Bi",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-3B-Instruct",
+  "mainline_pair": [
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct"
+  ],
+  "mainline_reference": {
+    "alpha": 0.79,
+    "accept_len_std_by_gamma": {
+      "1": 0.42,
+      "3": 1.24,
+      "5": 1.95,
+      "7": 2.55,
+      "10": 3.24
+    },
+    "p5_0_verdict": "GammaTune mean_emitted_per_round 2.94 vs best fixed gamma=7 3.67 (disjoint +/-1 std) -- GammaTune lost by ~20% on the primary metric; cost-model supplement put it within the optimal cluster (0.8-5.9%)."
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "temperature": 1.0,
+  "max_new_tokens": 48,
+  "n_prompts": 8,
+  "per_gamma": [
+    {
+      "gamma": 1,
+      "alpha_mean": 0.7297029076575795,
+      "alpha_std_across_seeds": 0.007534646218938339,
+      "accept_len_mean": 0.7248,
+      "accept_len_pooled_std": 0.44661500198717013,
+      "accept_len_hist": {
+        "0": 172,
+        "1": 453
+      },
+      "n_rounds_pooled": 625,
+      "mainline_accept_len_std": 0.42
+    },
+    {
+      "gamma": 3,
+      "alpha_mean": 0.7258181062499481,
+      "alpha_std_across_seeds": 0.02943612530085673,
+      "accept_len_mean": 1.5843230403800475,
+      "accept_len_pooled_std": 1.2636490275254648,
+      "accept_len_hist": {
+        "0": 125,
+        "1": 85,
+        "2": 51,
+        "3": 160
+      },
+      "n_rounds_pooled": 421,
+      "mainline_accept_len_std": 1.24
+    },
+    {
+      "gamma": 5,
+      "alpha_mean": 0.7302212051727374,
+      "alpha_std_across_seeds": 0.04414750654622072,
+      "accept_len_mean": 2.036312849162011,
+      "accept_len_pooled_std": 1.898638098317419,
+      "accept_len_hist": {
+        "0": 95,
+        "1": 97,
+        "2": 44,
+        "3": 23,
+        "4": 20,
+        "5": 79
+      },
+      "n_rounds_pooled": 358,
+      "mainline_accept_len_std": 1.95
+    },
+    {
+      "gamma": 7,
+      "alpha_mean": 0.7191964506599712,
+      "alpha_std_across_seeds": 0.009538338620504126,
+      "accept_len_mean": 2.2195845697329375,
+      "accept_len_pooled_std": 2.3045244762942003,
+      "accept_len_hist": {
+        "0": 93,
+        "1": 80,
+        "2": 54,
+        "3": 30,
+        "4": 17,
+        "5": 16,
+        "6": 7,
+        "7": 40
+      },
+      "n_rounds_pooled": 337,
+      "mainline_accept_len_std": 2.55
+    }
+  ],
+  "reading": {
+    "alpha_g3": 0.7258181062499481,
+    "accept_len_std_g3": 1.2636490275254648,
+    "accept_len_std_g5": 1.898638098317419,
+    "mainline_alpha": 0.79,
+    "recommend_switch_to_pair2": true,
+    "reading": "WEAK: alpha is still >= 0.70 and variance is not clearly larger than mainline. This pair is not meaningfully worse-matched; re-run with --pair2."
+  }
+}
