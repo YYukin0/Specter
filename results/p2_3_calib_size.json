@@ -1,0 +1,189 @@
+{
+  "task": "P2.3 calibration-set size ablation for self-built 4-bit AWQ",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "reference": "notes/project_plan_v9.md sec7 P2.3; AWQ paper sec 4.3",
+  "config": {
+    "n_calib_grid": [
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "shuffle_seeds": [
+      0,
+      1,
+      2
+    ],
+    "calib_distribution": "wikitext2 (natural language, fixed)",
+    "calib_row_tokens": 64,
+    "per_layer_cap": "n_calib * calib_row_tokens (scales with n_calib)",
+    "eval_window": 512,
+    "eval_stride": 512,
+    "eval_max_windows": 60,
+    "layers_limit": null
+  },
+  "capture_cap_bug_note": "first run used a fixed 512 tok/layer cap that saturated after 1-2 rows, making ppl bit-identical for every n_calib >= 8 (\u575116). This run scales the cap with n_calib and truncates rows to 64 tokens; n_calib=128 dropped for memory (needs layer-sequential capture rewrite).",
+  "fp16_baseline_wikitext2_ppl": 12.177170753479004,
+  "ppl_by_calib_size": {
+    "4": {
+      "mean": 13.56628449757894,
+      "std": 0.3911335575938371,
+      "runs": [
+        13.37769603729248,
+        13.30517578125,
+        14.015981674194336
+      ],
+      "delta_vs_fp16": 1.3891137440999355
+    },
+    "8": {
+      "mean": 13.451363245646158,
+      "std": 0.023201449497165905,
+      "runs": [
+        13.477457046508789,
+        13.443573951721191,
+        13.433058738708496
+      ],
+      "delta_vs_fp16": 1.2741924921671544
+    },
+    "16": {
+      "mean": 13.320892651875814,
+      "std": 0.06399869221115269,
+      "runs": [
+        13.371614456176758,
+        13.248988151550293,
+        13.34207534790039
+      ],
+      "delta_vs_fp16": 1.1437218983968105
+    },
+    "32": {
+      "mean": 13.250820477803549,
+      "std": 0.01996229052413523,
+      "runs": [
+        13.264678001403809,
+        13.259843826293945,
+        13.22793960571289
+      ],
+      "delta_vs_fp16": 1.0736497243245449
+    },
+    "64": {
+      "mean": 13.313653945922852,
+      "std": 0.020625937749642234,
+      "runs": [
+        13.296874046325684,
+        13.336681365966797,
+        13.307406425476074
+      ],
+      "delta_vs_fp16": 1.1364831924438477
+    }
+  },
+  "n_fell_back_by_size": {
+    "4": [
+      2,
+      5,
+      1
+    ],
+    "8": [
+      3,
+      2,
+      3
+    ],
+    "16": [
+      3,
+      6,
+      3
+    ],
+    "32": [
+      6,
+      7,
+      5
+    ],
+    "64": [
+      7,
+      7,
+      7
+    ]
+  },
+  "captured_tokens_per_layer_by_size": {
+    "4": [
+      152,
+      199,
+      29
+    ],
+    "8": [
+      240,
+      302,
+      230
+    ],
+    "16": [
+      482,
+      637,
+      563
+    ],
+    "32": [
+      1351,
+      1219,
+      1231
+    ],
+    "64": [
+      3202,
+      2710,
+      2673
+    ]
+  },
+  "capture_knob_actually_moved": true,
+  "curve_mean": [
+    [
+      4,
+      13.56628449757894
+    ],
+    [
+      8,
+      13.451363245646158
+    ],
+    [
+      16,
+      13.320892651875814
+    ],
+    [
+      32,
+      13.250820477803549
+    ],
+    [
+      64,
+      13.313653945922852
+    ]
+  ],
+  "curve_std": [
+    [
+      4,
+      0.3911335575938371
+    ],
+    [
+      8,
+      0.023201449497165905
+    ],
+    [
+      16,
+      0.06399869221115269
+    ],
+    [
+      32,
+      0.01996229052413523
+    ],
+    [
+      64,
+      0.020625937749642234
+    ]
+  ],
+  "knee_small_minus_large": 0.25263055165608783,
+  "variance_ratio_small_over_large": 18.963189084608842,
+  "verdict": "n_calib 4 vs 64: ppl 13.5663 vs 13.3137 (small - large = +0.2526). small-n_calib ppl noticeably higher -> possible overfit/underfill, inspect. std ratio small/large = 18.96 (variance blows up at small n_calib -- signal)",
+  "michael_3b_reference_direction_only": {
+    "source": "results/p2_awq_calibration_michael_3b.json p2_3_calibration_size_ablation",
+    "his_numbers": "ppl ~11.22 -> 11.27 across n_calib 4..N (flat) @ Qwen2.5-3B bf16",
+    "his_setup_differs": "3B not 1.5B, bf16 not fp16, his own AWQ impl, longer calib rows",
+    "our_direction_matches": false
+  },
+  "elapsed_s": 1456.6
+}
