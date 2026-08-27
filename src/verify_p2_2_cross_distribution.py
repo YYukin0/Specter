@@ -85,15 +85,33 @@ def _calib_token_jaccard(tokenizer, texts_a, texts_b):
             "shared": inter}
 
 
-def _quantize_fresh(calib_texts, max_windows, eval_corpora, *, layers_limit=None):
+def _quantize_fresh(calib_texts, max_windows, eval_corpora, *, layers_limit=None,
+                    max_tokens_per_layer=None, max_seq_len=None):
+    """Load a fresh fp16 model, capture calibration activations, run the
+    self-built AWQ pipeline, return (per-eval ppl, summary).
+
+    max_tokens_per_layer / max_seq_len default to CALIB_MAX_SEQ_LEN (512) --
+    the P2.2 setting. P2.3 overrides them so the per-layer activation pool
+    actually scales with n_calib instead of saturating at 512 tokens after
+    the first sequence or two (that saturation made the first P2.3 run report
+    a bit-identical ppl for every n_calib >= 8 -- see verify_p2_3_calib_size.py
+    and notes/project_plan_v9.md 坑16)."""
+    if max_tokens_per_layer is None:
+        max_tokens_per_layer = CALIB_MAX_SEQ_LEN
+    if max_seq_len is None:
+        max_seq_len = CALIB_MAX_SEQ_LEN
     from model_loader import load_model_and_tokenizer
     model, tokenizer = load_model_and_tokenizer(MODEL)
     calib_inputs = capture_all_layer_inputs(
         model, tokenizer, calib_texts,
-        max_tokens_per_layer=CALIB_MAX_SEQ_LEN, max_seq_len=CALIB_MAX_SEQ_LEN)
+        max_tokens_per_layer=max_tokens_per_layer, max_seq_len=max_seq_len)
     stats = _stats_from_capture(calib_inputs)
     recs = quantize_model(model, stats, calib_inputs, layers_limit=layers_limit)
     summ = summarize_records(recs)
+    summ["captured_tokens_per_layer_min"] = (
+        min(int(X.shape[0]) for X in calib_inputs.values()) if calib_inputs else 0)
+    summ["captured_tokens_per_layer_max"] = (
+        max(int(X.shape[0]) for X in calib_inputs.values()) if calib_inputs else 0)
     ppl = {}
     for ev_name, ev_texts in eval_corpora.items():
         r = eval_perplexity(model, tokenizer, ev_texts, window=EVAL_WINDOW,
