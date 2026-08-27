@@ -1,0 +1,210 @@
+{
+  "task": "P2.2 cross-distribution robustness of self-built 4-bit AWQ",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "reference": "notes/project_plan_v9.md sec7 P2.2; AWQ paper sec 4.3",
+  "config": {
+    "n_calib_rows": 32,
+    "shuffle_seeds": [
+      0,
+      1,
+      2
+    ],
+    "calib_max_seq_len": 512,
+    "eval_window": 512,
+    "eval_stride": 512,
+    "eval_max_windows": 60,
+    "layers_limit": null,
+    "fake_quant": "4-bit group128 asymmetric (awq_scaling.fake_quantize_groupwise)"
+  },
+  "no_gptq_note": "we have no self-built GPTQ; only the AWQ half of the sec4.3 claim is testable here -- whether AWQ's own cross-dist ppl increase is small and ~ its same-dist increase. GPTQ contrast: cloud.",
+  "code_corpus_note": "codeparrot-clean-valid not in local cache; mbpp Python solutions used as the code distribution.",
+  "fp16_baseline_ppl": {
+    "wikitext2": 12.177170753479004,
+    "mbpp_code": 3.1121835708618164
+  },
+  "quantized_ppl": {
+    "NL": {
+      "wikitext2": {
+        "mean": 13.389506340026855,
+        "std": 0.18906536405989996,
+        "runs": [
+          13.601513862609863,
+          13.238388061523438,
+          13.328617095947266
+        ]
+      },
+      "mbpp_code": {
+        "mean": 3.302389224370321,
+        "std": 0.018982946411971912,
+        "runs": [
+          3.290774345397949,
+          3.292097806930542,
+          3.3242955207824707
+        ]
+      }
+    },
+    "code": {
+      "wikitext2": {
+        "mean": 13.949960072835287,
+        "std": 0.05965483825866236,
+        "runs": [
+          13.979218482971191,
+          13.881324768066406,
+          13.989336967468262
+        ]
+      },
+      "mbpp_code": {
+        "mean": 3.277660846710205,
+        "std": 0.011185328052757602,
+        "runs": [
+          3.277296543121338,
+          3.2890238761901855,
+          3.266662120819092
+        ]
+      }
+    }
+  },
+  "deltas": {
+    "same_dist_delta_NL": 1.2123355865478516,
+    "cross_dist_delta_NL": 1.7727893193562831,
+    "same_dist_delta_code": 0.16547727584838867,
+    "cross_dist_delta_code": 0.19020565350850438,
+    "cross_minus_same_NL": 0.5604537328084316,
+    "cross_minus_same_code": 0.024728377660115708
+  },
+  "verdict": [
+    "eval=NL: same-dist ppl delta +1.2123, cross-dist +1.7728 (cross-cell std 0.0597). cross noticeably worse than same -> claim NOT cleanly reproduced here",
+    "eval=code: same-dist ppl delta +0.1655, cross-dist +0.1902 (cross-cell std 0.0190). cross noticeably worse than same -> claim NOT cleanly reproduced here"
+  ],
+  "reverse_check_sec9_6_risk4": {
+    "calib_set_token_jaccard": {
+      "jaccard": 0.031818181818181815,
+      "unique_tokens_NL": 190,
+      "unique_tokens_code": 37,
+      "shared": 7
+    },
+    "note": "low Jaccard + separate per-distribution activation capture => the two calibration distributions are genuinely different; a tiny cross-dist delta is not an artifact of identical calib data.",
+    "captured_activations_per_distribution": true,
+    "jaccard_full_32row_calib_added_post_run": {
+      "0": {
+        "jaccard": 0.03100263852242744,
+        "uniq_NL": 1171,
+        "uniq_code": 392,
+        "shared": 47
+      },
+      "1": {
+        "jaccard": 0.034482758620689655,
+        "uniq_NL": 1198,
+        "uniq_code": 392,
+        "shared": 53
+      },
+      "2": {
+        "jaccard": 0.031313818924438394,
+        "uniq_NL": 1097,
+        "uniq_code": 418,
+        "shared": 46
+      }
+    },
+    "interpretation": "Full 32-row calib sets: NL ~1155 unique tokens vs mbpp-code ~400, Jaccard ~0.03. The two calibration distributions are genuinely disjoint, so the +0.56 ppl cross-distribution penalty on NL eval (calib=code) is NOT an artifact of shared calibration data. It is most likely REAL and driven by mbpp being a very narrow code distribution (short puzzle solutions, tiny vocab) that under-covers the activation ranges NL text exercises. codeparrot (the planned, broader code corpus) might narrow this gap; it is unavailable offline here."
+  },
+  "michael_3b_reference_direction_only": {
+    "source": "results/p2_awq_calibration_michael_3b.json (Qwen2.5-3B, bf16, Michael's AWQ impl -- NOT directly comparable, direction only)",
+    "his_numbers": "calib=code eval=NL ppl 11.48 vs calib=NL eval=NL 11.24 (cross-dist delta ~ +0.24, small)",
+    "our_direction_matches": false
+  },
+  "per_shuffle_quant_summaries": {
+    "NL": [
+      {
+        "n_fell_back": 6,
+        "n_quantized": 190,
+        "alpha_histogram": {
+          "0.3": 25,
+          "0.4": 71,
+          "0.5": 61,
+          "0.6": 25,
+          "0.7": 5,
+          "0.9": 2,
+          "1.0": 1
+        }
+      },
+      {
+        "n_fell_back": 7,
+        "n_quantized": 189,
+        "alpha_histogram": {
+          "0.3": 23,
+          "0.4": 81,
+          "0.5": 55,
+          "0.6": 23,
+          "0.7": 4,
+          "0.9": 2,
+          "1.0": 1
+        }
+      },
+      {
+        "n_fell_back": 3,
+        "n_quantized": 193,
+        "alpha_histogram": {
+          "0.3": 18,
+          "0.4": 73,
+          "0.5": 63,
+          "0.6": 34,
+          "0.7": 2,
+          "0.9": 3
+        }
+      }
+    ],
+    "code": [
+      {
+        "n_fell_back": 6,
+        "n_quantized": 190,
+        "alpha_histogram": {
+          "0.3": 25,
+          "0.4": 84,
+          "0.5": 49,
+          "0.6": 28,
+          "0.7": 1,
+          "0.9": 2,
+          "1.0": 1
+        }
+      },
+      {
+        "n_fell_back": 6,
+        "n_quantized": 190,
+        "alpha_histogram": {
+          "0.3": 23,
+          "0.4": 84,
+          "0.5": 55,
+          "0.6": 23,
+          "0.7": 2,
+          "0.9": 2,
+          "1.0": 1
+        }
+      },
+      {
+        "n_fell_back": 5,
+        "n_quantized": 191,
+        "alpha_histogram": {
+          "0.2": 2,
+          "0.3": 26,
+          "0.4": 78,
+          "0.5": 60,
+          "0.6": 21,
+          "0.7": 1,
+          "0.9": 2,
+          "1.0": 1
+        }
+      }
+    ]
+  },
+  "calib_examples": {
+    "NL": [
+      " = = = Hero 's ( 2007 ) = = = \n",
+      " San Lorenzo Colossal Head 5 is also known as San Lorenzo Monument 5 . The monument stands 1 @.@ 86 metres ( 6 @.@ 1 ft ) high and measures 1 @.@ 47 metres ( 4 @.@ 8 ft ) wide by 1 @.@ 15 metres ( 3 @.@ 8 ft ) deep . It weighs 11 @.@ 6 tons . The head was discovered by Matthew Stirling in 1946 , face down in a gully to the south of the principal mound . The head is particularly well executed and is likely to have been found close to its original location . Ceramics recovered during its excavation became mixed with those from the excavation of Head 4 . The mixed ceramics have been dated to the San Lorenzo and Villa Alta phases ( approximately 1400 \u2013 1000 BC and 800 \u2013 1000 AD respectively ) . Colossal Head 5 is particularly well preserved , although the back of the headdress band was damaged when the head was moved from the archaeological site . The band of the headdress is set at an angle and has a notch above the bridge of the nose . The headdress is decorated with jaguar paws ; this general identification of the decoration is contested by Beatriz de la Fuente since the \" paws \" have three claws each ; she identifies them as the claws of a bird of prey . At the back of the head , ten interlaced strips form a net decorated with disc motifs . Two short straps descend from the headdress in front of the ears . The ears are adorned with disc @-@ shaped earspools with pegs . The face is that of an ageing man with wrinkles under the eyes and across the bridge of the nose , and a forehead that is creased in a frown . The lips are slightly parted . Colossal Head 5 has been moved to the Museo de Antropolog\u00eda de Xalapa . \n"
+    ],
+    "code": [
+      "import math\ndef surfacearea_cone(r,h):\n  l = math.sqrt(r * r + h * h)\n  SA = math.pi * r * (r + l)\n  return SA",
+      "def is_octagonal(n): \n\treturn 3 * n * n - 2 * n "
+    ]
+  },
+  "elapsed_s": 720.4
+}
