@@ -47,8 +47,12 @@ Start here. Each is a self-contained story.
    — an oracle lattice (symbolic / structural / batch / real-model) and the
    finding that a real-model output oracle is *not* a superset of the symbolic
    one.
+7. [Perplexity is not accuracy — and it mis-ranked two quantizers](docs/engineering-notes/07-perplexity-is-not-accuracy.md)
+   — running the self-built AWQ through GSM8K + IFEval: 4-bit costs ~1.4 ppl but
+   9.5 points of grade-school math, and perplexity ranks two AWQ implementations
+   in the *opposite* order from how they reason.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–21), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–23), the
 build-time ones first.
 
 ---
@@ -74,6 +78,10 @@ reinvent either:
   express those and would drown in equivalent mutants on numerical code. The
   *methodology* — operators → oracle battery → kill matrix (mutation adequacy) —
   is standard.
+- **Downstream eval** — the [EleutherAI lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
+  drives GSM8K + IFEval over an OpenAI-compatible endpoint (`local-chat-completions`
+  → mlx-lm server), so the from-scratch AWQ model is scored against the same
+  baseline on the same config ([note 07](docs/engineering-notes/07-perplexity-is-not-accuracy.md)).
 
 The algorithm-level control-flow bugs this repo hunts (off-by-one cache lengths,
 non-contiguous position ramps, swapped distributions) are a **different layer**
@@ -100,11 +108,12 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Adaptive-γ controller (GammaTune-style) | `src/gammatune.py` | done — **null result** on this pair (α ≈ 0.79, too little variance) |
 | AWQ quantization, from scratch (activation stats → scaling → quantize → ppl) | `src/awq_*.py` | done |
 | Real int4 via mlx-lm (AWQ / RTN / GPTQ arms) | `src/verify_p6_2_real_int4.py` | done |
+| Downstream eval (GSM8K + IFEval via lm-eval-harness) of self-AWQ vs fp16 vs mlx int4 | `src/build_self_awq_hf.py`, `src/verify_p6_6_downstream_eval.py` | done |
 | Fault-injection library (20+ mutation operators) | `src/spec_faultlib.py` | done |
 | Oracle stack O1/O3/O4/O5 + O2 (real model) | `src/spec_oracles.py`, `src/verify_p6_5_o2.py` | done |
 | Rule-based differential debugger | `src/specdiff.py` | done |
 
-195 tests (`pytest`). Result JSONs for every experiment in `results/`.
+201 tests (`pytest`). Result JSONs for every experiment in `results/`.
 
 ---
 
@@ -128,6 +137,11 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
   31 → 104 tok/s (**3.3×**), wikitext-2 ppl **+1.60**. AWQ calibration buys
   **+0.66 ppl** over naive round-to-nearest. `mlx_lm.gptq` produced a degenerate
   model on this architecture (坑21).
+- **4-bit costs reasoning, and perplexity doesn't see it.** On GSM8K (identical
+  chat/few-shot config, `flexible-extract`): the from-scratch AWQ drops **9.5
+  points** (64.8 → 55.3), the mlx-lm int4 model drops **4.0** — while IFEval
+  moves ≤ 2.5. Perplexity ranks the two AWQ builds *backwards* vs GSM8K: the
+  self-built one is 0.2 ppl **better** and 5.5 points **worse** at math (坑23).
 - **Adaptive-γ:** no win on this pair. The acceptance rate is high and stable, so
   there's nothing for a controller to adapt to — confirmed on 3 model pairs.
 - **Testing:** against ~20 semantic mutation operators, the output-equivalence
@@ -145,11 +159,11 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 
 ```
 src/            implementation + one verify_*.py driver per experiment
-tests/          195 pytest tests (hermetic + model-gated)
+tests/          201 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
-  engineering-notes/   the 6 stories above
-  pitfalls.md          坑1–21
+  engineering-notes/   the 7 stories above
+  pitfalls.md          坑1–23
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)
 ```
@@ -162,3 +176,5 @@ python -m pytest -q
 
 Experiment drivers are `src/verify_*.py`; the model-backed ones expect the Qwen
 weights in the local Hugging Face cache and run offline (`HF_HUB_OFFLINE=1`).
+`verify_p6_6_downstream_eval.py` also needs an isolated `.venv-lmeval` with
+`lm-eval[api]` (it shells out to it so the main env keeps its pinned versions).

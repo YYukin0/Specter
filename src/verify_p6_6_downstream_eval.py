@@ -178,6 +178,37 @@ METRIC_KEYS = {
 }
 
 
+def ppl_same_harness(want_arms: list) -> dict:
+    """wikitext-2 ppl for each arm on the *identical* P6.2 mlx harness (shared
+    token array, non-overlapping 512-tok blocks) so the ppl->downstream comparison
+    carries no cross-harness caveat. fp16 + mlx_awq_int4 are read from the P6.2
+    result file when present; self_awq is computed here.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from verify_p6_2_real_int4 import _wikitext_ids, _eval_ppl, PPL_SEQ_LEN, PPL_NUM_SAMPLES
+    from mlx_lm.utils import load
+
+    p62_path = RESULTS_DIR / "p6_2_awq_int4_real.json"
+    p62 = json.loads(p62_path.read_text())["arms"] if p62_path.exists() else {}
+    known = {
+        "fp16": p62.get("fp16_mlx", {}).get("wikitext2_ppl", {}).get("perplexity"),
+        "mlx_awq_int4": p62.get("mlx_awq_int4_g128", {}).get("wikitext2_ppl", {}).get("perplexity"),
+    }
+    all_arms = arms()
+    out = {"harness": "P6.2 mlx non-overlapping 512-tok blocks, first 32 of "
+                      "wikitext-2-raw-v1 test, shared token array"}
+    base = known.get("fp16")
+    for arm in want_arms:
+        v = known.get(arm)
+        if v is None:
+            model, tok = load(str(all_arms[arm]))
+            v = _eval_ppl(model, _wikitext_ids(tok, PPL_SEQ_LEN, PPL_NUM_SAMPLES))["perplexity"]
+            del model
+        out[arm] = {"wikitext2_ppl": round(v, 4),
+                    "delta_vs_fp16": None if base is None else round(v - base, 4)}
+    return out
+
+
 def compute_deltas(out_arms: dict, tasks: list, want_arms: list) -> dict:
     """Per-arm, per-task {metric -> quantised - fp16} (stderr keys dropped)."""
     base = out_arms.get("fp16", {}).get("tasks", {})
@@ -221,7 +252,17 @@ def main():
     ap.add_argument("--arms", default="fp16,self_awq,mlx_awq_int4")
     ap.add_argument("--smoke", action="store_true",
                     help="limit=5, tasks=gsm8k, arms=fp16 -- plumbing check")
+    ap.add_argument("--ppl-only", action="store_true",
+                    help="just (re)compute same-harness wikitext-2 ppl and patch the result JSON")
     args = ap.parse_args()
+
+    if args.ppl_only:
+        want = [a.strip() for a in args.arms.split(",") if a.strip()]
+        d = json.loads(JSON_PATH.read_text()) if JSON_PATH.exists() else {}
+        d["perplexity_same_harness"] = ppl_same_harness(want)
+        JSON_PATH.write_text(json.dumps(d, indent=2))
+        print(json.dumps(d["perplexity_same_harness"], indent=2))
+        return
 
     if args.smoke:
         args.limit, args.tasks, args.arms = 5, "gsm8k", "fp16"

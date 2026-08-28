@@ -9,7 +9,7 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–21, all 2026-08-28)
+## Found while building (坑13–23; 坑13–21 on 2026-08-28, 坑22–23 on 2026-08-29)
 
 ### 坑18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
@@ -126,6 +126,56 @@ output model must pass a sentinel — "generate one sentence, is it words?" plus
 "one forward, is the NLL finite?" — before you trust it. Don't just check that
 the tool finished and the weights file exists. And keep the degenerate arm in
 the results: "this tool doesn't work on this architecture" is useful information.
+
+---
+
+### 坑22 — GSM8K `strict-match` is a format check, not an arithmetic check, when the model is a chat model
+**Where:** P6.6 (支柱7 Bullet 3), downstream eval of AWQ.
+
+lm-eval's GSM8K task reports two numbers: `strict-match` (the answer must appear
+as `#### <number>` at a fixed position) and `flexible-extract` (last number in
+the response). With a chat template, Qwen2.5-1.5B produces a conversational CoT
+that ends "…so the total is **72**." — it rarely emits the `####` anchor. The
+**fp16 baseline itself** scores 0.378 strict vs 0.648 flexible. So the
+strict-match *deltas* between quantized and baseline (−22, −17 points) are mostly
+measuring how often each model happens to hit the format, not how often it does
+the math.
+
+**Fix:** report `flexible-extract` as the GSM8K metric; treat `strict-match` as
+noise on this stack. Keep both in the result JSON, lead with flexible in the
+write-up. (Cousin of lm-eval issue #1841 — chat templates silently move scores.)
+
+**Lesson:** know what each metric variant actually rewards before you quote a
+delta on it. A metric the baseline already fails for reasons unrelated to your
+change is not a measurement of your change.
+
+---
+
+### 坑23 — perplexity mis-ranked two 4-bit AWQ implementations for reasoning
+**Where:** P6.6 (支柱7 Bullet 3).
+
+On the identical wikitext-2 harness, the self-built AWQ scores **+1.39 ppl** vs
+fp16 and the `mlx_lm.awq` int4 model scores **+1.60** — so perplexity says the
+self-built one is the better quantizer. On GSM8K flexible-extract the order
+**reverses**: self-built loses **9.5 points**, `mlx_lm.awq` loses **4.0**. A
+0.2-ppl "win" on prose corresponds to a 5.5-point *deficit* on grade-school
+math. IFEval barely moves for either (−2.5 / −1.0 pt), so the damage is specific
+to multi-step reasoning, where per-weight rounding error compounds across CoT
+steps.
+
+The two arms differ in scale/clip search (`mlx_lm.awq` does the full AWQ
+weight-clip search; the self-built path does the scale search only) and in
+calibration and fp16-fallback policy — differences that barely register on
+perplexity but move GSM8K by ~5 points.
+
+**Fix / practice:** perplexity is a screening metric, not an acceptance metric.
+Before trusting a quantized model, run it on at least one task that needs a
+correct multi-step output, with the eval config (chat template, few-shot format,
+decoding params) held **identical** to the baseline.
+
+**Lesson:** ppl and downstream accuracy are not the same measurement and here they
+don't even agree on sign. "AWQ 4-bit g128" is not one number — the search and
+calibration details decide whether the model can still reason.
 
 ---
 

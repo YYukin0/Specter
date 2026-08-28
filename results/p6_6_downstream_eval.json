@@ -1,0 +1,248 @@
+{
+  "task": "\u652f\u67f17 Bullet 3 -- downstream eval (GSM8K + IFEval) of self-built AWQ",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "harness": "EleutherAI lm-evaluation-harness (local-chat-completions) over mlx-lm server",
+  "config": {
+    "tasks": [
+      "gsm8k",
+      "ifeval"
+    ],
+    "limit": 400,
+    "seed": 0,
+    "decoding": "greedy (temperature=0, do_sample=False)",
+    "max_gen_toks": 768,
+    "num_concurrent": 1,
+    "apply_chat_template": true,
+    "fewshot_as_multiturn": true,
+    "system_prompt": null,
+    "note": "all arms identical except weights; MMLU/HellaSwag excluded (loglikelihood tasks don't run over a chat API)"
+  },
+  "arms": {
+    "fp16": {
+      "model_path": "/Users/yyukin0/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "tasks": {
+        "gsm8k": {
+          "metrics": {
+            "exact_match,flexible-extract": 0.6475,
+            "exact_match_stderr,flexible-extract": 0.023917346710791564,
+            "exact_match,strict-match": 0.3775,
+            "exact_match_stderr,strict-match": 0.02426843148860863
+          },
+          "all_metrics": {
+            "name": "gsm8k",
+            "alias": "gsm8k",
+            "sample_len": 400,
+            "exact_match,strict-match": 0.3775,
+            "exact_match_stderr,strict-match": 0.02426843148860863,
+            "exact_match,flexible-extract": 0.6475,
+            "exact_match_stderr,flexible-extract": 0.023917346710791564
+          },
+          "n_samples": {
+            "original": 1319,
+            "effective": 400
+          },
+          "wall_seconds": 2127.0
+        },
+        "ifeval": {
+          "metrics": {
+            "prompt_level_strict_acc,none": 0.4175,
+            "prompt_level_strict_acc_stderr,none": 0.024688218756390844,
+            "inst_level_strict_acc,none": 0.5091514143094842,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.4475,
+            "prompt_level_loose_acc_stderr,none": 0.024892941194307634,
+            "inst_level_loose_acc,none": 0.5391014975041597,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "all_metrics": {
+            "name": "ifeval",
+            "alias": "ifeval",
+            "sample_len": 400,
+            "prompt_level_strict_acc,none": 0.4175,
+            "prompt_level_strict_acc_stderr,none": 0.024688218756390844,
+            "inst_level_strict_acc,none": 0.5091514143094842,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.4475,
+            "prompt_level_loose_acc_stderr,none": 0.024892941194307634,
+            "inst_level_loose_acc,none": 0.5391014975041597,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "n_samples": {
+            "original": 541,
+            "effective": 400
+          },
+          "wall_seconds": 3794.1
+        }
+      },
+      "server_load_seconds": 4.3,
+      "server_post_requests_logged": 801
+    },
+    "self_awq": {
+      "model_path": "/Users/yyukin0/Documents/Specter/src/results/bullet3_self_awq_1.5b_hf",
+      "tasks": {
+        "gsm8k": {
+          "metrics": {
+            "exact_match,flexible-extract": 0.5525,
+            "exact_match_stderr,flexible-extract": 0.024892941194307596,
+            "exact_match,strict-match": 0.1575,
+            "exact_match_stderr,strict-match": 0.018236386414903643
+          },
+          "all_metrics": {
+            "name": "gsm8k",
+            "alias": "gsm8k",
+            "sample_len": 400,
+            "exact_match,strict-match": 0.1575,
+            "exact_match_stderr,strict-match": 0.018236386414903643,
+            "exact_match,flexible-extract": 0.5525,
+            "exact_match_stderr,flexible-extract": 0.024892941194307596
+          },
+          "n_samples": {
+            "original": 1319,
+            "effective": 400
+          },
+          "wall_seconds": 2259.9
+        },
+        "ifeval": {
+          "metrics": {
+            "prompt_level_strict_acc,none": 0.3925,
+            "prompt_level_strict_acc_stderr,none": 0.024445927747963392,
+            "inst_level_strict_acc,none": 0.480865224625624,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.4175,
+            "prompt_level_loose_acc_stderr,none": 0.024688218756390844,
+            "inst_level_loose_acc,none": 0.5041597337770383,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "all_metrics": {
+            "name": "ifeval",
+            "alias": "ifeval",
+            "sample_len": 400,
+            "prompt_level_strict_acc,none": 0.3925,
+            "prompt_level_strict_acc_stderr,none": 0.024445927747963392,
+            "inst_level_strict_acc,none": 0.480865224625624,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.4175,
+            "prompt_level_loose_acc_stderr,none": 0.024688218756390844,
+            "inst_level_loose_acc,none": 0.5041597337770383,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "n_samples": {
+            "original": 541,
+            "effective": 400
+          },
+          "wall_seconds": 4324.5
+        }
+      },
+      "server_load_seconds": 5.2,
+      "server_post_requests_logged": 801
+    },
+    "mlx_awq_int4": {
+      "model_path": "/Users/yyukin0/Documents/Specter/src/results/p6_2_awq_1.5b",
+      "tasks": {
+        "gsm8k": {
+          "metrics": {
+            "exact_match,flexible-extract": 0.6075,
+            "exact_match_stderr,flexible-extract": 0.024445927747963312,
+            "exact_match,strict-match": 0.2075,
+            "exact_match_stderr,strict-match": 0.020301224699775536
+          },
+          "all_metrics": {
+            "name": "gsm8k",
+            "alias": "gsm8k",
+            "sample_len": 400,
+            "exact_match,strict-match": 0.2075,
+            "exact_match_stderr,strict-match": 0.020301224699775536,
+            "exact_match,flexible-extract": 0.6075,
+            "exact_match_stderr,flexible-extract": 0.024445927747963312
+          },
+          "n_samples": {
+            "original": 1319,
+            "effective": 400
+          },
+          "wall_seconds": 1248.6
+        },
+        "ifeval": {
+          "metrics": {
+            "prompt_level_strict_acc,none": 0.4075,
+            "prompt_level_strict_acc_stderr,none": 0.024599231297972052,
+            "inst_level_strict_acc,none": 0.49916805324459235,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.44,
+            "prompt_level_loose_acc_stderr,none": 0.024850429767895824,
+            "inst_level_loose_acc,none": 0.5374376039933444,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "all_metrics": {
+            "name": "ifeval",
+            "alias": "ifeval",
+            "sample_len": 400,
+            "prompt_level_strict_acc,none": 0.4075,
+            "prompt_level_strict_acc_stderr,none": 0.024599231297972052,
+            "inst_level_strict_acc,none": 0.49916805324459235,
+            "inst_level_strict_acc_stderr,none": "N/A",
+            "prompt_level_loose_acc,none": 0.44,
+            "prompt_level_loose_acc_stderr,none": 0.024850429767895824,
+            "inst_level_loose_acc,none": 0.5374376039933444,
+            "inst_level_loose_acc_stderr,none": "N/A"
+          },
+          "n_samples": {
+            "original": 541,
+            "effective": 400
+          },
+          "wall_seconds": 1305.2
+        }
+      },
+      "server_load_seconds": 4.2,
+      "server_post_requests_logged": 801
+    }
+  },
+  "deltas_vs_fp16": {
+    "self_awq": {
+      "gsm8k": {
+        "exact_match,flexible-extract": -0.095,
+        "exact_match,strict-match": -0.22
+      },
+      "ifeval": {
+        "prompt_level_strict_acc,none": -0.025,
+        "inst_level_strict_acc,none": -0.0283,
+        "prompt_level_loose_acc,none": -0.03,
+        "inst_level_loose_acc,none": -0.0349
+      }
+    },
+    "mlx_awq_int4": {
+      "gsm8k": {
+        "exact_match,flexible-extract": -0.04,
+        "exact_match,strict-match": -0.17
+      },
+      "ifeval": {
+        "prompt_level_strict_acc,none": -0.01,
+        "inst_level_strict_acc,none": -0.01,
+        "prompt_level_loose_acc,none": -0.0075,
+        "inst_level_loose_acc,none": -0.0017
+      }
+    }
+  },
+  "total_seconds": 15074.8,
+  "perplexity_same_harness": {
+    "harness": "P6.2 mlx non-overlapping 512-tok blocks, first 32 of wikitext-2-raw-v1 test, shared token array",
+    "fp16": {
+      "wikitext2_ppl": 11.5444,
+      "delta_vs_fp16": 0.0
+    },
+    "self_awq": {
+      "wikitext2_ppl": 12.9368,
+      "delta_vs_fp16": 1.3924
+    },
+    "mlx_awq_int4": {
+      "wikitext2_ppl": 13.1424,
+      "delta_vs_fp16": 1.598
+    },
+    "note": "directly comparable across all three arms -- NO cross-harness caveat, unlike the P2.2 torch fake-quant number. fp16 + mlx_awq_int4 from results/p6_2_awq_int4_real.json; self_awq computed the same way (verify_p6_6_downstream_eval.py --ppl-only)."
+  },
+  "headline": "On the identical ppl harness self_awq (+1.39) looks BETTER than mlx_awq_int4 (+1.60); on GSM8K flexible-extract the order REVERSES and widens -- self_awq -9.5 pts vs mlx_awq_int4 -4.0 pts. IFEval barely moves for either (-2.5 / -1.0 pts prompt-level strict). Perplexity mis-ranked the two AWQ implementations for reasoning; the instruction-following task is near-insensitive to 4-bit. All arms: 801 POST requests logged -> requests reached the server (pitfall 3 cleared). limit=400, greedy, identical chat-template/fewshot config.",
+  "known_config_differences_between_awq_arms": {
+    "self_awq": "group_size 128, 4-bit asymmetric fake-quant (fp16 matmul); per-layer alpha scale search only (no separate AWQ weight-clip search); 6/196 layers kept fp16 (non-improving); embed_tokens fp16; calib = wikitext-2 NL, 32 rows x 512 tok, seed 0",
+    "mlx_awq_int4": "mlx_lm.awq: real int4 kernel, group_size 128 on all 196 Linears, embed_tokens int4 g32, NO fp16 fallback, full AWQ scale+clip search (--n-grid 10), calib = mlx_lm.awq default (--num-samples 16 --sequence-length 256)",
+    "reading": "the arms differ in scale/clip search and calibration, not fake-vs-real packing (fake-quant is if anything more faithful). The gap that barely shows on ppl moves GSM8K by ~5 pts -- 'AWQ' is not one number."
+  }
+}
