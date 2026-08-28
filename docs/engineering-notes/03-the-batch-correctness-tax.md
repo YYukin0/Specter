@@ -30,6 +30,15 @@ shared tensor to desync. A test pins `batched(prompts) == [single(p) for p in
 prompts]`, bit-exact, in both greedy and sampling mode. No masking logic to get
 subtly wrong, no "did the batch change the answer" anxiety.
 
+That property has a name — **batch invariance** (Thinking Machines, *Defeating
+Nondeterminism in LLM Inference*, 2025). The determinism literature earns it at
+the *kernel* layer with batch-invariant RMSNorm / matmul / attention. This design
+gets it for free at the *loop* layer by refusing to share a tensor in the first
+place — a much cheaper move that only works because there's no kernel-level
+batching to want. Oracle **O5** in [note 06](06-testing-a-speculative-decoder.md)
+is the regression guard for it: it re-checks batch == N × single under every
+fault-injection mutant, and the reference path stays bitwise.
+
 The price is that there's no kernel-level batching of the verify forward, so
 throughput barely moves with concurrency. Measured aggregate tok/s across
 widths 1/2/4/8:

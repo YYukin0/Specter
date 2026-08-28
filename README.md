@@ -5,10 +5,22 @@ Apple silicon · a fault-injection oracle stack for testing the decoder itself.
 
 本地推理加速引擎：手写投机解码 × KV cache × 真 int4 × 投机解码器的故障注入测试。
 
+> **How do you know your inference optimization is correct? How do you know it's
+> actually faster?**
+
+That question is the spine of this repo. Every technique here — speculative
+decoding, KV caching, AWQ int4 — is implemented from scratch, tested to
+token-level equivalence with its reference, and reported with its failure cases
+and null results attached. Speculative decoding on this model pair is at
+*parity*, not a speedup; the adaptive-γ controller *loses* to a fixed γ; the
+circuit breaker trips once in sixteen runs. Those are in here on purpose. The
+value is the verification and measurement discipline, not a claim to a faster
+method.
+
 This repo is an engineering study, not a paper. Everything runs locally on a
 24 GB M-series Mac at $0 cloud spend. The interesting content is the
-**engineering notes** below: each one is a bug or a design fork that was worth
-writing down, with the numbers that settled it.
+**engineering notes** below: each one is "a measurement that fooled me, and how I
+caught it."
 
 ---
 
@@ -38,6 +50,39 @@ Start here. Each is a self-contained story.
 
 [**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–21), the
 build-time ones first.
+
+---
+
+## Where this sits (prior art)
+
+The correctness work draws on two established lines and is careful not to
+reinvent either:
+
+- **Batch invariance / numerical determinism** — Thinking Machines,
+  [*Defeating Nondeterminism in LLM Inference*](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/)
+  (He et al., 2025): batch-invariant RMSNorm / matmul / attention kernels so the
+  same input gives the same bits across batch sizes. That is a **kernel-layer**
+  property. Oracle O5 here ([note 06](docs/engineering-notes/06-testing-a-speculative-decoder.md))
+  is a batch-invariance check at the **loop layer** — it holds by construction
+  because the batched decoder shares no ragged tensor — and is not claimed as a
+  new idea.
+- **Mutation testing** — [cosmic-ray](https://github.com/sixty-north/cosmic-ray)
+  and [mutmut](https://github.com/boxed/mutmut) mutate *syntax* (literals,
+  operators). `spec_faultlib`'s ~20 operators are *semantic* (crop a KV cache to
+  the wrong anchor, draw the bonus token from the draft, freeze the position
+  vector) — a hand-written harness because a literal-mutation engine can't
+  express those and would drown in equivalent mutants on numerical code. The
+  *methodology* — operators → oracle battery → kill matrix (mutation adequacy) —
+  is standard.
+
+The algorithm-level control-flow bugs this repo hunts (off-by-one cache lengths,
+non-contiguous position ramps, swapped distributions) are a **different layer**
+from kernel-level float nondeterminism. See
+[note 06](docs/engineering-notes/06-testing-a-speculative-decoder.md) for the
+split. The batched-decoding correctness framing (keep the batch rectangular or
+prove output-equivalence per sequence) follows EQSPEC / *Batch Speculative
+Decoding Done Right* (arXiv:2510.22876); this repo takes the per-sequence-cache
+side of that fork ([note 03](docs/engineering-notes/03-the-batch-correctness-tax.md)).
 
 ---
 
@@ -85,10 +130,14 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
   model on this architecture (坑21).
 - **Adaptive-γ:** no win on this pair. The acceptance rate is high and stable, so
   there's nothing for a controller to adapt to — confirmed on 3 model pairs.
-- **Testing:** the real-model greedy oracle (O2) catches 5 of 9 mutation
-  operators that the symbolic oracle (O1) kills; it misses all three
-  position-index faults, which need the structural oracle O4. Output-equivalence
-  checks — at any model fidelity — are the weakest test in the stack.
+- **Testing:** against ~20 semantic mutation operators, the output-equivalence
+  oracles have a mutation score of ~0.56 (greedy) to 0.75 (sampling) — and
+  **0.0 against the KV-cache-management fault class**. The real-model greedy
+  oracle (O2) catches only 5 of 9 operators the symbolic oracle (O1) kills and
+  misses all three position-index faults: a real model is *not* a superset of the
+  fake one. Cache and position bugs are killed only by O4's structural
+  invariants. Output-equivalence checks, at any model fidelity, are the weakest
+  test in the stack.
 
 ---
 

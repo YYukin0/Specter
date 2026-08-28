@@ -104,4 +104,20 @@
 
 ---
 
+## 支柱7 — 简历定稿 + 深度补强（方向 B 收尾）
+
+> 2026-08-28 长会话决定：Specter = 简历招牌项目（ML Engineer / Inference Engineer，"ML Systems / performance" 定位），取代 short-URL generator。2026 年 local-inference / agent-infra 没有单人尺度的"没人做过"项目 —— 标准是**手艺 + 诚实测量 + 好写作**，不是新颖性。深度已到 2–5 年档（正确性/测试维度更高），缺口 = 系统/CUDA/规模。**完整方案（3 bullet + 主线 + $15 实验 + 展示结构 + 每条 bullet 的复用框架与坑）见 [`notes/简历定稿计划-Specter_2026-08-28.md`](notes/简历定稿计划-Specter_2026-08-28.md)（本支柱的 source of truth，此处只打勾）。** 主线："你怎么知道你的推理优化是对的?你怎么知道它真的加速了?"
+
+- [x] **Bullet 1 重新框定（$0，写作）** —— DONE。`docs/engineering-notes/06-testing-a-speculative-decoder.md` 大改：新增「Where this sits」两层拆分（kernel 层数值可复现性 = batch invariance / Thinking Machines；loop 层算法控制流正确性 = 本项目故障注入）、「Why not cosmic-ray / mutmut」段（语义级算子 vs 语法级字面量变异 + equivalent-mutant 问题在数值代码里的镜像：M-KV 对输出 oracle 隐身 = 真 bug 却「存活」每个输出测试）、mutation-adequacy 矩阵用 mutation score 术语重写、O5 明说「不是新东西、就是 batch-invariance 断言、参考路径 bitwise 成立、价值在当 note 03 等价性声明的回归守卫」。`docs/engineering-notes/03-the-batch-correctness-tax.md` 加一段把「output equivalence by construction」对齐到 batch invariance 正式名 + 指向 O5。`README.md`：顶部加主线那句（spine）+ pitch 段、新增「Where this sits (prior art)」节引 Thinking Machines「Defeating Nondeterminism」+ cosmic-ray + mutmut + EQSPEC/arXiv:2510.22876，headline「Testing」条改用 mutation score 口径（~0.56 greedy / 0.75 sampling / 0.0 对 M-KV 类）。纯文档，pytest 195 不变。
+- [ ] **Bullet 2 —— ~$15 vLLM/A100 投机解码基准（一次性云）** —— Vast.ai/RunPod 租 RTX 4090（8B 够）或 A100，vLLM V1 投机解码，Llama-3.1-8B target + `yuhuili/EAGLE3-LLaMA3.1-Instruct-8B` draft head。**先跑 ~95% 论文复现自检**确认没配错。用 **GuideLLM**（vLLM 官方推荐）跑：EAGLE3 vs ngram vs draft-model vs baseline，**并发扫描**（c∈{1,4,16,32,64}）报 break-even 曲线 + TTFT/TPOT P99。锁 config 求可比（`num_speculative_tokens=3`、greedy temp=0、输出长 1024、全量 GSM8K）。坑：并发一高加速塌（P-EAGLE 1.55×@c1→1.05×@c64）、真 α≈0.6–0.8、跨框架 acceptance 指标不一致（vLLM #42508）、draft-length 饱和、固定生成长度。
+- [ ] **Note #7 + 结果表（$0，写作）** —— 把 Mac-local（从头写的 Apple-silicon 实现）vs A100/vLLM 生产实现的对照写成第 7 篇 engineering note：分离"什么是根本的（batch=1 dead zone、α 驱动的 break-even）vs 什么是我硬件的限制"。一张结果表两边并排、标清硬件。
+- [ ] **Bullet 3 —— AWQ 接 lm-evaluation-harness（$0，半天）** —— 通过 mlx-lm OpenAI 端点用 EleutherAI lm-eval-harness `local-chat-completions`，只跑 **GSM8K + IFEval**（generative，API 上能跑；MMLU/HellaSwag 走 logprob 在 chat API 上坏）。baseline vs 自研 AWQ vs mlx-lm 生产 int4，**完全相同的 chat-template / system-prompt 配置**（坑：chat template 悄悄改分数，lm-eval #1841）。发现："推理任务退化比 ppl 显示的多" 写进 note。给足 `max_gen_toks`；`--fewshot_as_multiturn`；跑得可疑地快就查请求是否到 server。
+- [~] **README 重排 + 顶部 pitch 段（$0，写作）** —— 部分 DONE（随 Bullet 1）：顶部 pitch 段 + 主线那句 + prior-art 节已加。**待办**：3 个 headline 数字里 vLLM-A100 EAGLE3 ~1.8× 阻塞于 Bullet 2；正文 6 篇 note 重排最强打头 + 插第 7 篇、Mac vs A100 结果表 阻塞于 Bullet 2 / Note #7。pitfalls.md 当附录、demo 当物证已就位。
+- [ ] （可选高价值）**修 mlx-lm issue #846**（投机解码跳 token 正确性 bug，Qwen3 target + Qwen3-0.6B draft）**并提 PR** —— merged 上游 PR = 唯一外部背书，正好是 Specter oracle 栈的主场，喂 Bullet 1「我用 oracle 抓到并修了生产实现的真 bug」。备选 mlx-lm #1132（MoE warning）。
+- [ ] （可选，不进 bullet）**一个 fused Metal kernel + roofline before/after** —— 大概率结局"mx.fast 已经赢了"（诚实但不是卖点），留作博客附录。参考 ZMLX / Metal-Sci（arXiv 2605.09708）/ manishklach/mlx-metal-kernels。
+
+**当前硬件关不掉的缺口**（PagedAttention/chunked-prefill 内部、Triton kernel、70B 真规模）—— 靠简历 title targeting（ML Systems / perf）+ Bullet 2 证明栈熟悉度绕，不硬凑。
+
+---
+
 详细依据、任务级依赖分析、并行窗口表、里程碑验收标准见 [`notes/two_developer_plan_v2.md`](notes/two_developer_plan_v2.md)。此文件只负责"打勾"，不重复论证——如果某条任务的归属或顺序需要改，先改那份文档，再回来同步这里。
