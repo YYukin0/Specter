@@ -189,6 +189,36 @@ Algorithm 1：接受数 A 与当前 γ 相等时扩窗（$\gamma \leftarrow A + 
 
 ---
 
+### 支柱6：部署工程深度（方向 B，2026-08-28 新增，Mac 本地 $0）
+
+**背景**：Mac 侧研究（支柱1-5 的本地部分）基本做完，没有推翻任何论文结论——全是成功复现或复现论文自承认的局限。用户据此决定：不再追新研究发现，改把工程/部署侧做深。完整论证 + 逐条文献 challenge + 四轮 novelty 复查见 [`notes/deployment-depth-plan_2026-08-28.md`](deployment-depth-plan_2026-08-28.md)。三个硬伤要补：全项目刻意不用 KV cache（所有墙钟数字都标"indicative only"）、熔断器的 batch 信号是合成注入的（坑15）、AWQ 是 fake-quant（无真实内存/速度节省）。
+
+**P6.0 — KV-cache 正确的单序列投机解码（keystone，~2 单元）**
+`src/spec_kv.py`。难点=部分接受回滚：target cache 裁到 `prefix+k+1`、draft 裁到 `prefix+k`。`_crop_to(cache, target_len)` 薄封装锁 `DynamicCache.crop` 负数语义（正数走 deprecated 的"裁到绝对长度"、5.18 移除）。三向 token-exact parity 契约（写进 §9.2 新验收纪律）：`speculative_generate_kv(temp=0)` == `speculative_generate` == `target_only_generate`；采样同 seed == `speculative_generate`。产出第一个能引用的真实 tok/s。**不 novel**（HF assisted-gen / gpt-fast 早有），价值是 portfolio / craft。
+
+**P6.5 — `specdiff`：投机解码故障注入 + 差分调试器（头条交付物，~2.5 单元）**
+与 P6.0 并行起步（O1/O4 + M-SAMPLE/M-CTRL 只依赖 `rejection_sampling.py`）。四轮文献复查（7+ 检索角度，见 deployment-depth-plan §7 C6）确认：**没有公开发表的、可复用的、投机解码专用的主动种障式测试方法学**——相邻工作（vLLM in-tree e2e、《Batch Spec Decoding Done Right》的 batch 不变量 + EQSPEC/EXSPEC 实现、Ekka arXiv:2606.04594 的 agentic 静默错误 root-cause、DiFR/LLM-42/MarginGate 的 trace 自洽验证器）各差一步。
+- `src/spec_oracles.py` —— O1（FakeModel 符号级 exact，唯一精确 oracle）/ O2（真实模型 CPU fp32 greedy exact，放 CPU 因量化/Metal logits 非 batch-invariant，arXiv:2607.17283）/ O3（采样双样本检验 + 逐位置 KL，判据=超出 vanilla-vs-vanilla 预标定 null 带 kσ）/ O4（结构不变量常开断言）。
+- `src/spec_faultlib.py` —— 20+ 投机解码专用变异算子：M-KV（KV 裁剪差 1 / 不裁 draft cache / 绝对 vs 相对语义 / 交换 draft-target 裁剪长度）、M-POS（pos-id 差 1 / 冻结 / mask 泄漏未来 / 左 padding 逐轮漂移）、M-SAMPLE（reject 时从 target 而非 adjusted 采样 / 不 renormalize / abs 代替 relu / 接受比值方向反 / bonus token 丢 / 偷偷注入 leniency）、M-CTRL（verify γ-1 / accept 数与 cache 步进 desync / EOS 块内忽略）。
+- `src/specdiff.py` —— 差分调试器：轮次二分（hash 前缀找肇事轮 R）→ R 轮结构化状态转储 → 规则式机制分类器（上游 KV/pos 损坏 / 采样数学故障 / 控制 desync / 后端 batch-invariance）。和 Ekka 同形状但规则式、本地、免费、投机解码专用。
+- `results/p6_5_mutation_adequacy.json` —— mutation-adequacy 矩阵（≥3 seed）。**可引用 finding：哪类投机解码 bug 对输出等价测试不可见、必须靠不变量断言**。
+- 演示：打 P6.0/P6.1、复现 2510.22876 的 BSP 失败签名并定位、把 2607.17283 的 batch-invariance 效应分类成"非算法"、blind mutant hunt 报准确率。
+- **诚实边界**：mutation testing 元思想是 1970 年代的；新的是投机解码专用算子目录 + O1-O4 oracle 栈 + 规则式机制分类器，不是元思想。
+
+**P6.1 — 输出等价的批量投机解码 + serving loop（~2 单元）**
+`src/spec_kv_batch.py` + `src/serving_loop.py`（`SpecServer`：请求队列、continuous batching）。走 **EQSPEC 风格每轮重同步**，不用 `spec_batch.py` 现在的 masking 路线（坑将转 §9.2 坑19，ragged tensor / position-id 断裂）。熔断器接真信号（`len(scheduler.active)` + 滚动 α + 延迟探针），trip 按 α<~0.5 / 实测延迟、不按 raw batch 阈值（坑将转 §9.2 坑20，"大 batch 投机没用"前提已被 2025 长上下文工作部分推翻）。`results/p6_1_serving_throughput.json` 含 realignment 开销 %（正确性税）。P6.5 扩到 batch。
+
+**P6.2 — 真实 int4（走 mlx-lm，~1 单元）**
+`src/awq_to_mlx.py` + `src/verify_p6_2_real_int4.py`。四方本地对比：自研 from-scratch AWQ vs `mlx_lm.awq` / `mlx_lm.gptq` / `mlx_lm.dwq`（都 4-bit，都本地 Metal）。验证 P2.1 fake-quant ppl 是否诚实。注意 P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢先，降级为本地顺手确认。
+
+**P6.3 — live demo（~1 单元）** `src/demo/` 终端实时视图（stdlib + ANSI，不装新依赖），基于 `SpecServer`，三开关现场看加速差。
+
+**P6.4 — 打包 + 工程故事（~1 单元）** README 重定位；6 篇工程故事（坑16 确认偏误 / 把 KV cache 做对 / 批量正确性税 / 熔断器真信号 + 前提过时 / fake-quant vs 真 int4 / 测一个投机解码器：输出等价检查漏掉了什么）；坑表（17→~20）当一等公民。
+
+依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。**
+
+---
+
 ## 8. 考虑过的其他方案
 
 | 决策点 | 选择的方案 | 考虑过的替代方案 | 拒绝理由 |

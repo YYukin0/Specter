@@ -84,4 +84,24 @@
 
 ---
 
+## 支柱6 — 部署工程深度（方向 B，Mac 本地，$0）
+
+> 2026-08-28 用户决定：Mac 侧研究（M0–M5）基本做完、没有推翻任何论文，改走工程深度。完整方案 + 逐条文献 challenge + 四轮 novelty 复查见 [`notes/deployment-depth-plan_2026-08-28.md`](notes/deployment-depth-plan_2026-08-28.md)（该文档是本支柱的论证 source of truth，此处只打勾）。模型对不动（draft=Qwen2.5-0.5B-Instruct / target=Qwen2.5-1.5B-Instruct）。不装新依赖、不上云、直接 commit `main`。**优先级高于 M6–M8 的云端条目。**
+
+- [ ] **P6.0（keystone）** KV-cache 正确的单序列投机解码 —— `src/spec_kv.py`：`speculative_generate_kv`，难点=部分接受回滚（target cache 裁到 `prefix+k+1`、draft 裁到 `prefix+k`），`_crop_to(cache, target_len)` 薄封装锁 `DynamicCache.crop` 负数语义。三向 token-exact parity 契约：`speculative_generate_kv(temp=0)` == `speculative_generate` == `target_only_generate`；采样同 seed == `speculative_generate`。测试 `tests/test_spec_kv.py`（FakeModel cache 长度断言 + greedy parity + 采样 parity + 回滚压力）。`src/verify_spec_kv.py` → `results/p6_0_kv_cache_speculative.json`（第一个能引用的真实 tok/s）。
+- [ ] **P6.5（头条交付物）** `specdiff` —— 投机解码故障注入 + 差分调试器。**与 P6.0 并行起步**（O1/O4 + M-SAMPLE/M-CTRL 只依赖 `rejection_sampling.py`）。四轮文献复查（7+ 角度）确认无公开可复用的投机解码专用故障注入测试方法学（详见 plan §7 C6）。产出：
+  - `src/spec_oracles.py` —— O1（FakeModel 符号级 exact）/ O2（真实模型 CPU fp32 greedy exact）/ O3（采样双样本检验 + 逐位置 KL，含 vanilla-vs-vanilla null 带预标定）/ O4（结构不变量常开断言：KV 长度、pos id 连续、mask 行和、概率守恒、RNG 确定、EOS 后不提交）。
+  - `src/spec_faultlib.py` —— 20+ 投机解码专用变异算子（M-KV / M-POS / M-SAMPLE / M-CTRL），可开关 monkeypatch context manager + 注册表。
+  - `src/specdiff.py` —— 差分调试器 CLI：轮次二分 → R 轮状态转储 → 规则式机制分类器（上游 KV/pos 损坏 / 采样数学故障 / 控制 desync / 后端 batch-invariance）。
+  - `tests/test_spec_faultlib.py` —— 元测试（每个 mutant 确实改行为；每个 oracle 确实杀对应类）。
+  - `results/p6_5_mutation_adequacy.json` —— mutation-adequacy 矩阵（≥3 seed），可引用 finding：哪类 bug 对输出等价测试不可见、必须靠不变量断言。
+  - 演示：打 P6.0/P6.1、复现 2510.22876 BSP 签名、把 2607.17283 batch-invariance 效应分类成"非算法"、blind mutant hunt 报准确率。
+- [ ] **P6.1** 输出等价的批量投机解码 + serving loop —— `src/spec_kv_batch.py` + `src/serving_loop.py`（`SpecServer`：请求队列、continuous batching）。**走 EQSPEC 风格每轮重同步**，不用 `spec_batch.py` 现在的 masking 路线（plan §7 C3）。熔断器接真信号（`len(scheduler.active)` + 滚动 α + 延迟探针），trip 按 α<~0.5 / 实测延迟、不按 raw batch 阈值（plan §7 C4）。`results/p6_1_serving_throughput.json` 含 realignment 开销 %（"正确性税"）。P6.5 扩到 batch。
+- [ ] **P6.2** 真实 int4（走 mlx-lm）—— `src/awq_to_mlx.py` + `src/verify_p6_2_real_int4.py` → `results/p6_2_awq_int4_real.json`。四方本地对比：自研 from-scratch AWQ vs `mlx_lm.awq` / `mlx_lm.gptq` / `mlx_lm.dwq`（都 4-bit）。验证 P2.1 fake-quant ppl 是否诚实。可与 P6.0/6.1 独立穿插。
+- [ ] **P6.3** live demo —— `src/demo/`：终端实时视图（stdlib + ANSI，不为 demo 装依赖；Web 版另问）。基于 `SpecServer`，三开关现场看加速差。录 asciinema/GIF。
+- [ ] **P6.4** 打包 + 写成工程故事 —— README 重定位；6 篇工程故事（坑16 确认偏误 / 把 KV cache 做对 / 批量正确性税 / 熔断器真信号 + 前提过时 / fake-quant vs 真 int4 / **测一个投机解码器：输出等价检查漏掉了什么**）；坑表（17→~20）当一等公民。
+- [ ] 落地时把 P6.0–P6.5 的 parity / O1–O4 oracle 契约写进 `notes/project_plan_v9.md` §7 + §9.2；plan §7 的 C1/C3/C4 撞上时转成坑18/19/20。
+
+---
+
 详细依据、任务级依赖分析、并行窗口表、里程碑验收标准见 [`notes/two_developer_plan_v2.md`](notes/two_developer_plan_v2.md)。此文件只负责"打勾"，不重复论证——如果某条任务的归属或顺序需要改，先改那份文档，再回来同步这里。
