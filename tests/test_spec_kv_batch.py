@@ -110,6 +110,18 @@ def test_realignment_overhead_closed_form():
     assert ragged_realignment_overhead([1, 1, 10]) > ragged_realignment_overhead([3, 4, 5])
 
 
+def test_batch_invariance_verify_smoke():
+    """P6.5 Part 5: the batched decoder is bit-exactly the single-sequence
+    decoder on a noise-free model (the 'non-algorithmic' baseline), and
+    specdiff's clean path returns NO_DIVERGENCE."""
+    import verify_p6_5_batch_invariance as vbi
+
+    out = vbi.run(smoke=True)
+    assert out["algorithm_batch_invariance"]["n_mismatch"] == 0
+    assert out["algorithm_batch_invariance"]["max_abs_token_delta"] == 0
+    assert out["specdiff_clean_path"]["all_NO_DIVERGENCE"]
+
+
 def test_degraded_round_is_plain_target_decoding():
     draft, target, tok = make_fake_pair()
     # one sequence, degraded server round == one target_only_generate_kv token

@@ -37,10 +37,16 @@ from typing import List, Optional
 
 import torch
 
+import rejection_sampling as _rs
 import spec_faultlib as faultlib
 import spec_kv as _kv
-from rejection_sampling import collect_eos_ids, encode_prompt
+from rejection_sampling import encode_prompt
 from spec_kv import speculative_generate_kv, speculative_step_kv, target_only_generate_kv
+from spec_kv_batch import make_seq, run_round
+
+# NB: call `_rs.collect_eos_ids(...)` through the module, never a `from ... import`
+# binding -- the `eos_ignored_midblock` operator monkeypatches it on `_rs`, and a
+# local binding would silently bypass the mutation (same trap as specdiff).
 
 
 # --------------------------------------------------------------------------- #
@@ -220,6 +226,68 @@ def run_o3(mutants=(), *, gammas=(1, 3, 5), seeds=(0, 1, 2, 3, 4), eos=False,
 
 
 # --------------------------------------------------------------------------- #
+# O5 -- batched path (P6.1) equals N independent single-sequence runs
+# --------------------------------------------------------------------------- #
+def _drive_batch(seqs, draft, target, tok, *, gamma, temperature, max_rounds=10**6):
+    eos = _rs.collect_eos_ids(tok, target)
+    dev = torch.device("cpu")
+    n = 0
+    while any(not s.done for s in seqs) and n < max_rounds:
+        run_round(seqs, draft, target, gamma=gamma, temperature=temperature,
+                  eos_ids=eos, device=dev, dtype=torch.float32, mode="spec")
+        n += 1
+    return seqs
+
+
+def run_o5(mutants=(), *, gammas=(1, 3, 5), seeds=(0, 1, 2), eos=False,
+           max_new_tokens=48, params=None, temperatures=(0.0, 1.0)) -> OracleResult:
+    """Equivalence-preservation oracle for the batched path (P6.1).
+
+    A `spec_kv_batch.run_round` round over the 6 prompts must emit exactly what 6
+    independent `speculative_generate_kv` runs would, at matched seeds -- with the
+    SAME fault operator active in both. This is not mutated-vs-clean (that is
+    O1/O3); it asks whether the batched driver stays bit-identical to the
+    single-sequence loop *even when the shared code path is broken*. The per-seq
+    KV-cache design claims output equivalence "by construction"; O5 stress-tests
+    that claim against all 17 operators. `killed` here means an operator broke
+    batch/single equivalence -- a real `run_round` bug -- and the expected result
+    is that NONE do."""
+    params = params or {}
+    draft, target, tok = make_fake_pair(eos=eos)
+    n_runs = n_div = 0
+    firsts: List[int] = []
+    for temperature in temperatures:
+        for gamma in gammas:
+            for seed in seeds:
+                # reference: single-sequence path, mutation active
+                with faultlib.apply(*mutants, **params):
+                    refs = [
+                        speculative_generate_kv(p, draft, target, tok,
+                                                make_cache=LengthOnlyCache, gamma=gamma,
+                                                max_new_tokens=max_new_tokens,
+                                                temperature=temperature, seed=seed).token_ids
+                        for p in _PROMPTS
+                    ]
+                # batched path, same mutation
+                seqs = [make_seq(f"s{i}", p, tok, device=torch.device("cpu"),
+                                 max_new_tokens=max_new_tokens, seed=seed,
+                                 make_cache=LengthOnlyCache)
+                        for i, p in enumerate(_PROMPTS)]
+                with faultlib.apply(*mutants, **params):
+                    _drive_batch(seqs, draft, target, tok, gamma=gamma,
+                                 temperature=temperature)
+                for i in range(len(_PROMPTS)):
+                    n_runs += 1
+                    d = _first_divergence(seqs[i].token_ids, refs[i], tol_tail=gamma)
+                    if d is not None:
+                        n_div += 1
+                        firsts.append(d)
+    return OracleResult(oracle="O5", killed=n_div > 0, n_runs=n_runs, n_diverged=n_div,
+                        first_divergence_tokens=firsts,
+                        note="batched run_round vs N single-sequence speculative_generate_kv")
+
+
+# --------------------------------------------------------------------------- #
 # O4 -- structural invariants (always-on assertions)
 # --------------------------------------------------------------------------- #
 @contextlib.contextmanager
@@ -268,7 +336,7 @@ def _drive_once(prompt, draft, target, tok, gamma, seed, max_new_tokens, violati
     device = torch.device("cpu")
     ctx = encode_prompt(tok, prompt, device, True)
     committed = ctx[0].tolist()
-    eos_ids = collect_eos_ids(tok, target)
+    eos_ids = _rs.collect_eos_ids(tok, target)
     dcache, tcache = LengthOnlyCache(), LengthOnlyCache()
     dsync = tsync = 0
     out: List[int] = []

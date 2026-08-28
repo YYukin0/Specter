@@ -32,10 +32,14 @@ import torch
 
 import rejection_sampling as _rs
 import spec_kv as _kv
+import spec_kv_batch as _kvb   # P6.1 batched decoder -- operators must reach it too
 
 # modules that did `from rejection_sampling import <pure helper>` -- a patch must
-# hit every binding, not just the origin module.
-_MATH_MODULES = (_rs, _kv)
+# hit every binding, not just the origin module. `_kvb` re-imports dist_from_logits
+# / _sample (used by its degraded-mode step); its speculative path goes through
+# spec_kv.speculative_step_kv, so the M-KV / M-POS patches on `_kv` already cover
+# it, but the math-helper bindings it copied need patching here.
+_MATH_MODULES = (_rs, _kv, _kvb)
 
 
 # --------------------------------------------------------------------------- #
@@ -81,13 +85,18 @@ def _inject(**injection_fields):
             return orig(*args, **kw)
         return wrapped
 
+    orig_kvb_step = getattr(_kvb, "speculative_step_kv", None)
     try:
         _rs.speculative_step = wrap(orig_rs_step)
         _kv.speculative_step_kv = wrap(orig_kv_step)
+        if orig_kvb_step is not None:                 # batched path's own binding
+            _kvb.speculative_step_kv = wrap(orig_kvb_step)
         yield
     finally:
         _rs.speculative_step = orig_rs_step
         _kv.speculative_step_kv = orig_kv_step
+        if orig_kvb_step is not None:
+            _kvb.speculative_step_kv = orig_kvb_step
 
 
 # --------------------------------------------------------------------------- #
@@ -261,13 +270,35 @@ GROUP: Dict[str, str] = {
     "pos_id_frozen": "M-POS",
 }
 
-# operators that need batched KV decoding (P6.1) -- catalogued, not yet active.
+# Operators catalogued but not active, with WHY (updated after P6.1 landed).
+#
+# P6.1 (src/spec_kv_batch.py) took the EQSPEC rectangular invariant to its limit:
+# per-sequence KV caches, no shared ragged batch tensor. That design decision
+# makes the mask/pad-drift operators *architecturally inexpressible* on this
+# codebase -- there is no attention mask, no left-pad, and no cross-sequence
+# position-id tensor to corrupt. Their inexpressibility here IS the sec 7 C3
+# finding (notes/project_plan_v9.md 坑19): the per-seq path buys output
+# equivalence by construction, at the cost of kernel batching.
+#
+#   mask_leak_future / mask_left_pad_drift
+#       Only expressible against the shared-tensor masking route in
+#       src/spec_batch.py (M5[A], no KV cache). And the deterministic FakeModel
+#       ignores position_ids (it keys logits off cache_position), so reproducing
+#       the arXiv:2510.22876 BSP signature needs a RoPE-sensitive *real* model ->
+#       it is a P6.4 real-model demo, not part of the hermetic matrix.
+#   kv_swap_draft_target_crop / accept_count_desync
+#       Expressible on SeqState, but invisible to output-equivalence oracles
+#       (O1/O3/O5): they corrupt per-stream telemetry / cache bookkeeping without
+#       changing the tokens. Catching them needs a telemetry-consistency oracle
+#       (O6), which is the next P6.5 increment.
+#   gamma_off_by_one_verify
+#       Needs a step-level rewrite of the verify loop, not a monkeypatch.
 DEFERRED = {
-    "mask_leak_future": "P6.1",
-    "mask_left_pad_drift": "P6.1",       # reproduces the arXiv:2510.22876 BSP signature
-    "kv_swap_draft_target_crop": "P6.1",
-    "accept_count_desync": "P6.1",
-    "gamma_off_by_one_verify": "step-level rewrite",
+    "mask_leak_future": "inexpressible on per-seq caches; real-model spec_batch.py only",
+    "mask_left_pad_drift": "arXiv:2510.22876 BSP signature; needs RoPE real model (P6.4)",
+    "kv_swap_draft_target_crop": "expressible, invisible to O1/O3/O5; needs O6 telemetry oracle",
+    "accept_count_desync": "expressible, invisible to O1/O3/O5; needs O6 telemetry oracle",
+    "gamma_off_by_one_verify": "step-level rewrite, not a monkeypatch",
 }
 
 

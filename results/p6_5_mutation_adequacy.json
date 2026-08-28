@@ -16,11 +16,11 @@
   "n_operators": 17,
   "n_deferred_operators": 5,
   "deferred_operators": {
-    "mask_leak_future": "P6.1",
-    "mask_left_pad_drift": "P6.1",
-    "kv_swap_draft_target_crop": "P6.1",
-    "accept_count_desync": "P6.1",
-    "gamma_off_by_one_verify": "step-level rewrite"
+    "mask_leak_future": "inexpressible on per-seq caches; real-model spec_batch.py only",
+    "mask_left_pad_drift": "arXiv:2510.22876 BSP signature; needs RoPE real model (P6.4)",
+    "kv_swap_draft_target_crop": "expressible, invisible to O1/O3/O5; needs O6 telemetry oracle",
+    "accept_count_desync": "expressible, invisible to O1/O3/O5; needs O6 telemetry oracle",
+    "gamma_off_by_one_verify": "step-level rewrite, not a monkeypatch"
   },
   "oracle_mutation_scores_excl_equivalent": {
     "O1": 0.5625,
@@ -54,6 +54,10 @@
     "equivalent": [
       "kv_crop_absolute_vs_relative"
     ]
+  },
+  "O5_batch_equivalence": {
+    "operators_that_break_batch_single_equivalence": [],
+    "meaning": "spec_kv_batch.run_round (P6.1, per-sequence KV caches) stays bit-identical to N independent speculative_generate_kv runs even with each fault operator active. An empty list is the intended result: output equivalence is a property of the per-seq-cache architecture, not just of the un-mutated code -- there is no shared ragged tensor for a bug to desync (plan sec 7 C3 / \u575119)."
   },
   "headline": {
     "caught_only_by_O4_structural_invariants": [
@@ -96,6 +100,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -125,6 +135,12 @@
           "adjusted_distribution sum=0.254635 != 1"
         ]
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -148,6 +164,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": ""
     },
@@ -173,6 +195,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -196,6 +224,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": ""
     },
@@ -221,6 +255,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -244,6 +284,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": ""
     },
@@ -269,6 +315,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -293,6 +345,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -316,6 +374,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": ""
     },
@@ -346,6 +410,12 @@
           "draft cache len 13 != committed-1 14"
         ]
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -375,6 +445,12 @@
           "draft cache len 13 != committed-1 12"
         ]
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -398,6 +474,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": "On transformers 5.16 a positive crop arg and the negative form leave the same cache length when n < current; they differ only by a deprecation warning and removal at 5.18. True behavioural equivalent here."
     },
@@ -428,6 +510,12 @@
           "draft cache len 100 != committed-1 35"
         ]
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -451,6 +539,12 @@
         "n_runs": 90,
         "n_violation_hits": 0,
         "violations": []
+      },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
       },
       "equivalent_note": ""
     },
@@ -476,6 +570,12 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     },
     {
@@ -500,8 +600,14 @@
         "n_violation_hits": 0,
         "violations": []
       },
+      "O5_batch_equiv": {
+        "broken": false,
+        "n_runs": 180,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
       "equivalent_note": ""
     }
   ],
-  "elapsed_s": 50.22134887508582
+  "elapsed_s": 68.62280062504578
 }

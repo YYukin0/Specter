@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import rejection_sampling as rs  # noqa: E402
 import spec_faultlib as fl  # noqa: E402
 import spec_kv as kv  # noqa: E402
-from spec_oracles import run_o1, run_o3, run_o4  # noqa: E402
+import spec_kv_batch as kvb  # noqa: E402
+from spec_oracles import run_o1, run_o3, run_o4, run_o5  # noqa: E402
 
 FAST = dict(gammas=(3,), seeds=(0, 1))
 FAST_O3 = dict(gammas=(3,), seeds=(0, 1, 2))
@@ -40,6 +41,7 @@ def test_clean_baseline_passes_all_oracles():
     assert not run_o1(**FAST).killed
     assert not run_o3(**FAST_O3).killed
     assert not run_o4(**FAST).killed
+    assert not run_o5(**FAST).killed
 
 
 @pytest.mark.parametrize("name", fl.names())
@@ -100,6 +102,32 @@ def test_gross_bugs_caught_by_greedy_exact(name):
 
 
 # --------------------------------------------------------------------------- #
+# O5 -- the batched decoder (P6.1) preserves single-sequence equivalence even
+# with a fault operator active. The per-sequence-cache design has no shared
+# ragged tensor, so batching cannot introduce a divergence class of its own.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("name", fl.names())
+def test_batched_path_stays_equivalent_under_every_operator(name):
+    r = run_o5((name,), eos=_eos(name), **FAST)
+    assert not r.killed, (
+        f"{name} broke spec_kv_batch.run_round vs single-sequence equivalence "
+        f"({r.n_diverged}/{r.n_runs} runs) -- a real batch-path bug, not an "
+        f"oracle catch"
+    )
+
+
+def test_faultlib_reaches_the_batched_step_binding():
+    """`_inject`-style operators must patch spec_kv_batch's own
+    `speculative_step_kv` binding, not just spec_kv's -- otherwise force-accept /
+    bonus-provenance mutations silently no-op on the batched path."""
+    import spec_kv_batch as _kvb
+    orig = _kvb.speculative_step_kv
+    with fl.apply("force_accept_first"):
+        assert _kvb.speculative_step_kv is not orig
+    assert _kvb.speculative_step_kv is orig
+
+
+# --------------------------------------------------------------------------- #
 # context-manager hygiene
 # --------------------------------------------------------------------------- #
 def test_apply_restores_all_patched_names():
@@ -114,6 +142,8 @@ def test_apply_restores_all_patched_names():
         ("rs", "speculative_step"): rs.speculative_step,
         ("kv", "speculative_step_kv"): kv.speculative_step_kv,
     }
+    before[("kvb", "speculative_step_kv")] = kvb.speculative_step_kv
+    before[("kvb", "dist_from_logits")] = kvb.dist_from_logits
     with fl.apply("accept_always", "kv_no_crop", "pos_id_frozen",
                   "eos_ignored_midblock", "bonus_token_from_draft"):
         pass
@@ -127,6 +157,8 @@ def test_apply_restores_all_patched_names():
         ("rs", "collect_eos_ids"): rs.collect_eos_ids,
         ("rs", "speculative_step"): rs.speculative_step,
         ("kv", "speculative_step_kv"): kv.speculative_step_kv,
+        ("kvb", "speculative_step_kv"): kvb.speculative_step_kv,
+        ("kvb", "dist_from_logits"): kvb.dist_from_logits,
     }
     assert before == after
     # and a clean oracle run still passes afterwards
@@ -140,9 +172,12 @@ def test_unknown_mutator_raises():
 
 
 def test_deferred_operators_are_catalogued():
-    # batch-only operators are named for the P6.1 increment, not silently missing
+    # batch-only / step-rewrite operators are named with a reason, not silently
+    # missing. After P6.1 the reason strings explain why each stays inactive
+    # (per-seq caches make mask/pad drift inexpressible -- plan 坑19).
     assert "mask_left_pad_drift" in fl.DEFERRED
-    assert fl.DEFERRED["mask_left_pad_drift"] == "P6.1"
+    assert "2510.22876" in fl.DEFERRED["mask_left_pad_drift"]
+    assert all(isinstance(v, str) and v for v in fl.DEFERRED.values())
 
 
 if __name__ == "__main__":
