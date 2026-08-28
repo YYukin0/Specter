@@ -114,10 +114,9 @@ class SpecServer:
         self.tok = tokenizer
         self.cfg = config or ServeConfig()
         self.device = next(target_model.parameters()).device
-        try:
-            self.dtype = next(target_model.parameters()).dtype
-        except StopIteration:
-            self.dtype = torch.float32
+        # input_ids dtype -- speculative_step_kv builds `torch.tensor([...], dtype=)`
+        # for token ids, so this is long, NOT the model weight dtype.
+        self.dtype = torch.long
         self.eos_ids = collect_eos_ids(tokenizer, target_model)
 
         self.pending: Deque[Tuple[str, str, int, Optional[int]]] = collections.deque()
