@@ -1,7 +1,12 @@
 """
 P1.4 -- gamma sweep for the P1.1 speculative decoder.
 
-gamma in {1, 3, 5, 7, 10} (notes/project_plan_v9.md sec 7 P1.4 + sec 9.6 risk 2).
+gamma in {1, 3, 5, 7, 10, 16} (notes/project_plan_v9.md sec 7 P1.4 + sec 9.6 risk 2).
+gamma=16 was added 2026-08-28 so the accept-length-std curve has a point opposite
+every one of the three AdaEDL Fig 7c reference values the plan cites (DL=3/7/16 ->
+std ~= 1.2 / 1.92 / 2.35). See adaedl_fig7c_comparison in the result file; the
+magnitudes are not expected to match (different model pair / dataset), only the
+monotone-increasing shape.
 
 What is recorded, and why:
   * The full distribution of per-round accept lengths (n_accepted, 0..gamma), not
@@ -33,7 +38,13 @@ from model_loader import DRAFT_MODEL_NAME, TARGET_MODEL_NAME, load_model_and_tok
 from prompts import PROMPTS
 from rejection_sampling import speculative_generate, target_only_generate
 
-GAMMAS = [1, 3, 5, 7, 10]
+GAMMAS = [1, 3, 5, 7, 10, 16]
+
+# AdaEDL paper Fig 7c (Dolly-15k, Llama2-7B target, aligned 115M draft): the three
+# accept-length-std points the plan quotes as the empirical basis for "pillar 5
+# needs an adaptive gamma". Direction-only reference -- different model pair and
+# dataset, so absolute magnitude is not expected to line up.
+ADAEDL_FIG7C_STD_REFERENCE = {3: 1.2, 7: 1.92, 16: 2.35}
 SEEDS = [0, 1, 2]
 TEMPERATURE = 1.0
 MAX_NEW_TOKENS = 48
@@ -154,6 +165,23 @@ def main():
 
     notes = significance_notes(rows)
 
+    std_by_gamma = {r["gamma"]: r["accept_length_std"] for r in rows}
+    adaedl_cmp = {
+        "reference": "AdaEDL Fig 7c (Dolly-15k, Llama2-7B target, aligned 115M draft) -- direction only",
+        "note": ("our draft/target pair and eval prompts differ from AdaEDL's, so absolute "
+                 "std magnitude is not expected to match; the test is whether std rises "
+                 "monotonically with gamma the way their figure shows"),
+        "points": [
+            {"gamma": g, "ours_accept_length_std": std_by_gamma.get(g),
+             "adaedl_fig7c_std": ref}
+            for g, ref in sorted(ADAEDL_FIG7C_STD_REFERENCE.items())
+        ],
+        "ours_monotone_increasing_in_gamma": all(
+            a["accept_length_std"] <= b["accept_length_std"] + 1e-9
+            for a, b in zip(rows, rows[1:])
+        ),
+    }
+
     result = {
         "draft_model": DRAFT_MODEL_NAME,
         "target_model": TARGET_MODEL_NAME,
@@ -165,6 +193,7 @@ def main():
         "variance_grows_with_gamma": [
             {"gamma": r["gamma"], "accept_length_std": r["accept_length_std"]} for r in rows
         ],
+        "adaedl_fig7c_comparison": adaedl_cmp,
         "adjacent_significance_notes": notes,
     }
     RESULTS_PATH.parent.mkdir(exist_ok=True)

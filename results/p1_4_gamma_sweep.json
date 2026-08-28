@@ -9,12 +9,12 @@
   "temperature": 1.0,
   "max_new_tokens": 48,
   "target_only_baseline": {
-    "tok_per_s_mean": 8.940534882856397,
-    "tok_per_s_std": 0.1571480819774453,
+    "tok_per_s_mean": 8.879187189740675,
+    "tok_per_s_std": 0.14226199602567227,
     "per_seed": [
-      8.718730320815965,
-      9.039381804183765,
-      9.06349252356946
+      8.6796954338292,
+      9.001516087032417,
+      8.956350048360404
     ]
   },
   "per_gamma": [
@@ -35,12 +35,12 @@
         0.7729468599033816
       ],
       "tok_per_s_per_seed": [
-        11.001000899842959,
-        11.000768475353754,
-        10.765021679834721
+        10.826635111531425,
+        10.569522262758289,
+        10.990283596171041
       ],
-      "speedup_vs_target_only_mean": 1.2216566266022937,
-      "speedup_vs_target_only_std": 0.012436272559999484
+      "speedup_vs_target_only_mean": 1.2158185307727711,
+      "speedup_vs_target_only_std": 0.019504259037717908
     },
     {
       "gamma": 3,
@@ -61,12 +61,12 @@
         1.7196969696969697
       ],
       "tok_per_s_per_seed": [
-        10.859267719133774,
-        10.736233570681428,
-        10.474638283553833
+        11.596474624476041,
+        10.81353355485268,
+        10.265088475589499
       ],
-      "speedup_vs_target_only_mean": 1.195683106718219,
-      "speedup_vs_target_only_std": 0.017939050933279757
+      "speedup_vs_target_only_mean": 1.2266549462497414,
+      "speedup_vs_target_only_std": 0.06153030650226661
     },
     {
       "gamma": 5,
@@ -89,12 +89,12 @@
         2.5980392156862746
       ],
       "tok_per_s_per_seed": [
-        9.92696868261891,
-        9.663897006960962,
-        9.90429726094789
+        9.771299960834448,
+        9.477377663941569,
+        9.854617102659779
       ],
-      "speedup_vs_target_only_mean": 1.0996792823169583,
-      "speedup_vs_target_only_std": 0.013313506186327375
+      "speedup_vs_target_only_mean": 1.092566023800871,
+      "speedup_vs_target_only_std": 0.018223490609108092
     },
     {
       "gamma": 7,
@@ -119,12 +119,12 @@
         2.74468085106383
       ],
       "tok_per_s_per_seed": [
-        8.309372742367902,
-        8.327765605993877,
-        8.29931230704259
+        8.286686447980046,
+        8.242535860209086,
+        8.082229244455831
       ],
-      "speedup_vs_target_only_mean": 0.9297150928191992,
-      "speedup_vs_target_only_std": 0.001317691819168616
+      "speedup_vs_target_only_mean": 0.9239378570252429,
+      "speedup_vs_target_only_std": 0.009893327564794644
     },
     {
       "gamma": 10,
@@ -152,12 +152,51 @@
         3.0217391304347827
       ],
       "tok_per_s_per_seed": [
-        6.5208638806737875,
-        7.467031131498751,
-        6.875704876802222
+        6.3480125512768835,
+        7.377916913648173,
+        6.647994523752598
       ],
-      "speedup_vs_target_only_mean": 0.777865461904336,
-      "speedup_vs_target_only_std": 0.04365199404622455
+      "speedup_vs_target_only_mean": 0.7648569459232486,
+      "speedup_vs_target_only_std": 0.04870901742795482
+    },
+    {
+      "gamma": 16,
+      "n_rounds_pooled": 249,
+      "accept_length_mean": 3.4016064257028114,
+      "accept_length_std": 4.117666589500421,
+      "accept_length_hist": {
+        "0": 70,
+        "1": 44,
+        "2": 30,
+        "3": 17,
+        "4": 15,
+        "5": 20,
+        "6": 9,
+        "7": 11,
+        "8": 3,
+        "9": 8,
+        "10": 3,
+        "11": 2,
+        "12": 2,
+        "13": 1,
+        "14": 4,
+        "15": 0,
+        "16": 10
+      },
+      "emitted_per_round_mean": 4.353413654618474,
+      "emitted_per_round_std": 4.124030662981441,
+      "per_seed_mean_accept_length": [
+        2.9782608695652173,
+        4.154929577464789,
+        3.2325581395348837
+      ],
+      "tok_per_s_per_seed": [
+        5.066524238775544,
+        6.155248474127011,
+        5.129596125876793
+      ],
+      "speedup_vs_target_only_mean": 0.6138463085777451,
+      "speedup_vs_target_only_std": 0.056202000695000295
     }
   ],
   "variance_grows_with_gamma": [
@@ -180,23 +219,49 @@
     {
       "gamma": 10,
       "accept_length_std": 3.241155529010805
+    },
+    {
+      "gamma": 16,
+      "accept_length_std": 4.117666589500421
     }
   ],
+  "adaedl_fig7c_comparison": {
+    "reference": "AdaEDL Fig 7c (Dolly-15k, Llama2-7B target, aligned 115M draft) -- direction only",
+    "note": "our draft/target pair and eval prompts differ from AdaEDL's, so absolute std magnitude is not expected to match; the test is whether std rises monotonically with gamma the way their figure shows",
+    "points": [
+      {
+        "gamma": 3,
+        "ours_accept_length_std": 1.2424667354376024,
+        "adaedl_fig7c_std": 1.2
+      },
+      {
+        "gamma": 7,
+        "ours_accept_length_std": 2.549392799131775,
+        "adaedl_fig7c_std": 1.92
+      },
+      {
+        "gamma": 16,
+        "ours_accept_length_std": 4.117666589500421,
+        "adaedl_fig7c_std": 2.35
+      }
+    ],
+    "ours_monotone_increasing_in_gamma": true
+  },
   "adjacent_significance_notes": [
     {
       "pair": "gamma=1 vs gamma=3",
       "speedup_mean": [
-        1.2216566266022937,
-        1.195683106718219
+        1.2158185307727711,
+        1.2266549462497414
       ],
       "intervals_overlap": true,
-      "verdict": "gamma=1 numerically faster but +/-1 std intervals overlap -- not statistically significant at this run count"
+      "verdict": "gamma=3 numerically faster but +/-1 std intervals overlap -- not statistically significant at this run count"
     },
     {
       "pair": "gamma=3 vs gamma=5",
       "speedup_mean": [
-        1.195683106718219,
-        1.0996792823169583
+        1.2266549462497414,
+        1.092566023800871
       ],
       "intervals_overlap": false,
       "verdict": "gamma=3 faster, intervals disjoint"
@@ -204,8 +269,8 @@
     {
       "pair": "gamma=5 vs gamma=7",
       "speedup_mean": [
-        1.0996792823169583,
-        0.9297150928191992
+        1.092566023800871,
+        0.9239378570252429
       ],
       "intervals_overlap": false,
       "verdict": "gamma=5 faster, intervals disjoint"
@@ -213,11 +278,20 @@
     {
       "pair": "gamma=7 vs gamma=10",
       "speedup_mean": [
-        0.9297150928191992,
-        0.777865461904336
+        0.9239378570252429,
+        0.7648569459232486
       ],
       "intervals_overlap": false,
       "verdict": "gamma=7 faster, intervals disjoint"
+    },
+    {
+      "pair": "gamma=10 vs gamma=16",
+      "speedup_mean": [
+        0.7648569459232486,
+        0.6138463085777451
+      ],
+      "intervals_overlap": false,
+      "verdict": "gamma=10 faster, intervals disjoint"
     }
   ]
 }
