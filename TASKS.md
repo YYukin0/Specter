@@ -31,7 +31,7 @@
 - [x] P1.1 Rejection Sampling 核心算法 —— `src/rejection_sampling.py`（`speculative_step`/`speculative_generate`，temperature=0 时 one-hot 使贪心成为同一码路径的特例）；单测 `tests/test_rejection_sampling.py` 复现附录 A.1 手算算例（接受概率 0.571、拒绝后重采样分布 A 清零为 {A:0,B:1/3,C:2/3}）+ FakeModel 端到端验证 bonus token 来自目标模型（坑2）
 - [x] P1.2 贪心模式验证器 —— `src/verify_greedy.py`，结果 `results/p1_2_greedy_verifier.json`。正向：8/8 prompt 与 target-only 贪心逐 token 完全一致（另与中和了 repetition_penalty 的 HF `generate` 独立交叉验证）。反向（§9.6风险3）：注入 bonus-from-draft(坑2) 和 force-accept 两个已知 bug，验证器分别在 5/8、7/8 prompt 上报出分叉 → 非盲
 - [x] P1.3 采样模式验证器（含验证器故障注入测试，§9.6风险3）—— `src/verify_sampling.py`，结果 `results/p1_3_sampling_verifier.json`。①统计：实测 α=0.788 vs 理论 E[min(p,q)]=0.798，z=−0.95（Poisson-binomial SE 内吻合）；②坑2 bonus 溯源：Δ=mean(log p_TM−log p_DM)，正确实现 +0.38 / bug −0.41 清晰分离（贪心模式下坑2常不可见，故采样模式补这条分布层面的注入检查）；③下游 parity：ROUGE-L（LCS-F1 内联实现，避免 HumanEval 依赖/沙箱）spec 29.55 vs target-only 31.25，差 1.70 点（<2）
-- [x] P1.4 γ 扫描 —— `src/gamma_sweep.py`，结果 `results/p1_4_gamma_sweep.json`。γ∈{1,3,5,7,10}，每 γ 跑 3 seed（采样模式，使重复真有方差）。接受长度 std 随 γ 单调递增：0.42/1.24/1.95/2.55/3.24（AdaEDL "DL 越大方差越大" 的实证基础，支撑支柱5自适应γ）。墙钟加速比 1.22x→0.78x（MPS 无 KV cache，仅指示性；真实吞吐曲线是 P4）；γ=1 vs γ=3 差异不显著，其余相邻对显著。
+- [x] P1.4 γ 扫描 —— `src/gamma_sweep.py`，结果 `results/p1_4_gamma_sweep.json`。γ∈{1,3,5,7,10,16}（2026-08-28 加 γ=16，对齐 AdaEDL Fig 7c 三个参照点），每 γ 跑 3 seed（采样模式，使重复真有方差）。接受长度 std 随 γ 单调递增：0.42/1.24/1.95/2.55/3.24/4.12（AdaEDL "DL 越大方差越大" 的实证基础，支撑支柱5自适应γ；`adaedl_fig7c_comparison` 字段：γ=3 落在其 1.2 上，γ=7/16 我们更陡 2.55/4.12 vs 1.92/2.35，模型对不同、只比方向）。墙钟加速比 1.22x→1.23x→1.09x→0.92x→0.76x→0.61x（MPS 无 KV cache，仅指示性；真实吞吐曲线是 P4/P6）；γ=3 是加速拐点，≥5 净亏；γ=1 vs γ=3 差异不显著，其余相邻对显著。
 - 顺带记录新坑：`notes/project_plan_v9.md` §9.2 坑13（块内 EOS 停止逻辑）
 
 ## M3 — AgentBench 评测（支柱3）【B】
