@@ -234,6 +234,8 @@ P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢
 
 依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。** 进度：P6.0/P6.1/P6.2/P6.3/P6.4 DONE；P6.5 Parts 1–5 + O2 DONE，剩 Part 6 工程故事（与 P6.4 故事 06 重叠，实质已覆盖）+ 2510.22876 BSP 签名复现（架构上不可表达，转真实模型演示，未做）。
 
+**P6.6 —（支柱7 Bullet 3）自研 AWQ 接下游 eval（GSM8K + IFEval）** —— 归属支柱7（source of truth `notes/简历定稿计划-Specter_2026-08-28.md`），代码沿 `verify_p6_*` 家族放。`src/build_self_awq_hf.py` 把 P2.1/P2.2 的 fake-quant AWQ 管线（4-bit g128、逐层 α 搜、非改进层回退 fp16；calib 锁 P2.2 主格 = wikitext-2 NL / n_calib=32 / seed 0）产物写成 HF safetensors checkpoint（fp16 权重落在 4-bit 网格上 → 服务端按 fp16 跑，下游精度 == fake-quant 精度）。`src/verify_p6_6_downstream_eval.py` 编排：每臂（fp16 / self_awq / mlx_awq_int4[=P6.2 那份]）起 `mlx_lm.server`，用 EleutherAI lm-evaluation-harness `local-chat-completions` 跑 gsm8k + ifeval，收 metric + 对 fp16 的 delta。三臂同一 eval 配置、只权重不同：greedy / `max_gen_toks=768` / `--apply_chat_template` / `--fewshot_as_multiturn` / `num_concurrent=1` / 无 system prompt。MMLU/HellaSwag 排除（loglikelihood 任务过不了 chat API，Bullet 3 坑1）。harness 装在隔离的 `.venv-lmeval`（lm-eval[api] 0.4.12 + langdetect/immutabledict/nltk punkt），项目 `.venv`（195 tests）不动。测试 `tests/test_verify_p6_6_downstream_eval.py`（6 hermetic）。**结果 + 契约 + 坑待全量跑完回填。**
+
 ---
 
 ## 8. 考虑过的其他方案
