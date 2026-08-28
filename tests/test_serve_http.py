@@ -160,3 +160,22 @@ def test_unknown_routes_404(server):
         with pytest.raises(urllib.error.HTTPError) as ei:
             _get(server, path)
         assert ei.value.code == 404
+
+
+@pytest.mark.usefixtures("server")
+def test_capture_writes_json_and_js_sidecar(tmp_path):
+    # the static page loads the run via <script src="sample_run.js">, not fetch,
+    # so capture must emit both files (the fixture populates serve_http._STATE)
+    out = tmp_path / "run.json"
+    serve_http.capture(out)
+    assert out.exists() and (tmp_path / "run.js").exists()
+
+    payload = json.loads(out.read_text())
+    assert [e["event"] for e in payload["events"][:1]] == ["start"]
+    assert payload["events"][-1]["event"] == "compare_done"
+    assert not any("tps_series" in e["data"] for e in payload["events"]
+                   if isinstance(e["data"], dict))
+
+    js = (tmp_path / "run.js").read_text()
+    assert js.startswith("window.SPECTER_RUN = ")
+    assert json.loads(js[len("window.SPECTER_RUN = "):].rstrip().rstrip(";")) == payload

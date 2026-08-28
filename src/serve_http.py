@@ -1,15 +1,21 @@
 """
 Specter serving demo -- a stdlib HTTP wrapper around `SpecServer`.
 
-No new dependencies (http.server + json + threading). Serves the single-file
-lab page at `/` and streams a live speculative-decoding run over Server-Sent
-Events at `/generate`, so the same telemetry the terminal demo prints
-(src/demo/live.py) shows up in a browser: streamed text, per-round gamma /
-accept length / rolling alpha / tok-s / concurrency / circuit-breaker state.
+The demo people actually look at is the *static* page `docs/site/index.html`: it
+embeds a recorded real run (`sample_run.js`) and replays it with no server. This
+module is (a) how that recording is produced and (b) an optional live backend so
+you can drive the same page against your own prompts.
+
+No new dependencies (http.server + json + threading). Serves the lab page at `/`
+and streams a live speculative-decoding run over Server-Sent Events at
+`/generate`, with the same telemetry the terminal demo prints (src/demo/live.py):
+streamed text, per-round gamma / accept length / rolling alpha / tok-s /
+concurrency / circuit-breaker state.
 
     python -m src.serve_http                 # real Qwen2.5 0.5B/1.5B, loaded once
     python -m src.serve_http --fake          # deterministic FakeModel pair, no download
-    python -m src.serve_http --capture out.json   # one real run -> replay file, then exit
+    python -m src.serve_http --capture docs/site/sample_run.json
+                                             # one real run -> sample_run.json + .js, then exit
 
 Endpoints:
     GET  /            docs/site/index.html
@@ -224,23 +230,32 @@ class Handler(BaseHTTPRequestHandler):
 def capture(path: Path):
     """Run one real generation and dump the SSE timeline for the static replay.
 
-    Prunes the two heavy summary fields (`tps_series`, `final_texts`) the static
-    page never reads, so the committed replay stays small.
+    Writes two files next to each other:
+      <path>            JSON, for the server's /sample route and tooling
+      <path>.js         `window.SPECTER_RUN = {...}` -- so the page replays with
+                        no server and no fetch (works from file:// and Pages)
+
+    Drops the per-round `tps_series` (nothing reads it); keeps `final_texts` so
+    the page can show the finished outputs before the replay starts.
     """
     body = {"demo_batch": True, "max_tokens": 128, "spec": True,
             "breaker": True, "compare": True}
     events = []
     for e, d in run_stream(body):
         if isinstance(d, dict):
-            d = {k: v for k, v in d.items() if k not in ("tps_series", "final_texts")}
-            for heavy in ("speculative", "baseline"):
-                if isinstance(d.get(heavy), dict):
-                    d[heavy] = {k: v for k, v in d[heavy].items()
-                                if k not in ("tps_series", "final_texts")}
+            d = {k: v for k, v in d.items() if k != "tps_series"}
+            for arm in ("speculative", "baseline"):
+                if isinstance(d.get(arm), dict):
+                    d[arm] = {k: v for k, v in d[arm].items() if k != "tps_series"}
         events.append({"event": e, "data": d})
-    path.write_text(json.dumps({"captured": time.strftime("%Y-%m-%d"),
-                                "backend": _STATE["backend"], "events": events}))
-    print(f"wrote {path}  ({len(events)} events, {path.stat().st_size // 1024} KB)")
+
+    payload = {"captured": time.strftime("%Y-%m-%d"),
+               "backend": _STATE["backend"], "events": events}
+    blob = json.dumps(payload, separators=(",", ":"))
+    path.write_text(blob)
+    js = path.with_suffix(".js")
+    js.write_text("window.SPECTER_RUN = " + blob + ";\n")
+    print(f"wrote {path} + {js.name}  ({len(events)} events, {len(blob) // 1024} KB)")
 
 
 def main():
