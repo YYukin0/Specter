@@ -9,3 +9,4 @@ papers/*.pdf
 # never entered git until it was copied up to results/ (see that dir).
 src/results/
 code/
+.venv-lmeval/
