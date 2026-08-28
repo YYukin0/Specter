@@ -37,7 +37,7 @@
 ## M3 — AgentBench 评测（支柱3）【B】
 
 - [x] P3.0 任务集改编 —— `src/agentbench_os_tasks/`（框架取自 `origin/b/p3-0-agentbench-tasks`，逐文件审阅后作为新文件加入、不 merge）。**18 个任务 / 14 active / 4 held-out**（file_ops·code_refactor·cli_tools 各 5、multistep 3；held-out 每类一个）。tempfile sandbox、纯 stdlib、verify() 独立重算 ground truth、`verify_smoke_test.py` 对每个任务断言「未改动→FAIL / golden→PASS」（18/18 通过）。`tests/test_agentbench_os_tasks.py` 包装进 pytest。分支原版 15 个，本轮为满足 active≥12 加了 3 个 active 任务（_05）。
-- [~] P3.1 接受率对比实验（结构化 vs 自由文本 α）—— `src/verify_p3_1_alpha.py` + `tests/test_verify_p3_1_alpha.py`（FakeModel smoke）。结构化组 = 14 个非-held-out P3.0 任务描述，对照组 = `prompts.py` 前 5 条 prose，γ=3/temp=1.0/seed{0,1,2}。**代码 done，真实模型跑 + 结果 JSON 待**（不能与 P2.3 并发跑，排在其后）。
+- [x] P3.1 接受率对比实验（结构化 vs 自由文本 α）—— `src/verify_p3_1_alpha.py` + `tests/test_verify_p3_1_alpha.py`（FakeModel smoke）。结构化组 = 14 个非-held-out P3.0 任务描述，对照组 = `prompts.py` 前 5 条 prose，γ=3/temp=1.0/seed{0,1,2}/48 新 token，draft 0.5B / target 1.5B。结果 `results/p3_1_structured_vs_freetext_alpha.json`：结构化 pooled α 0.834（per-run 0.837±0.085，n=42）、自由文本 pooled α 0.741（per-run 0.741±0.086，n=15），pooled gap +0.093、combined std 0.121。**verdict = no_clear_difference**：结构化方向性偏高（与"结构化/工具调用输出接受率更高"的生产直觉一致），但 3 seed 下 gap 不超过一个 combined std，不显著。反向复核（坑=风险4）：结构化组从不提前 EOS（48.8/48 tok），自由文本组 1/3 提前 EOS（41.4 tok）——方向不是"结构化续写更短更易"的假象。如实记为弱方向 / null 结果，未调参。
 
 ## M4 — 自适应控制器 Mac 部分（支柱5前半）【A】（完成：P5.0 + P5.1 + P5.3 done）
 
@@ -51,7 +51,7 @@
 
 ## M5 — Batch 交叉点 Mac 部分（支柱4前半）【A+B 分曲线】
 
-- [ ] **[A]** 投机解码吞吐曲线（batch ∈ {1,4,8,16,32,64}）
+- [x] **[A]** 投机解码吞吐曲线（Mac 本地小 batch 段）—— `src/spec_batch.py`（`speculative_generate_batch`：左 padding + 显式 attention_mask/position_ids，逐序列 γ 按剩余预算 clamp，ragged 接受、finished 序列留在张量里但不采样/不计分，复用 `adjusted_distribution`/`acceptance_probability`/`_sample`，block-EOS 截断=坑13）+ `tests/test_spec_batch.py`（batch=1 与 `speculative_generate` 逐 token 相同=正确性契约、FakeModel batch=4 ragged EOS、padding 不影响未 padding 位 logits）+ `src/verify_spec_batch.py`。batch ∈ {1,2,4,8}（24GB Mac 内存所限，未上 16/32/64），γ=3/temp=1.0/seed{0,1,2}/8 prompts/无 KV cache。结果 `results/p5_5_spec_batch_curve.json`：每次 target 前向产出 token 数 2.82→5.09→9.63→16.42（随 batch 近线性上升），mean tok/seq/round 基本持平（2.85/2.85/2.91/2.79，batch 组合不损投机效率，efficiency drop bs1→bs8 仅 6%、不显著），峰值显存 4135→4490 MB（~51 MB/单位 batch）。tok/s 11.4→15.0→17.0→15.0（无 KV cache，仅相对趋势有意义）。batch=1 与单序列版 4/4 parity。
 - [x] **[B]** 量化吞吐曲线（同 batch 范围，用 B 自己的 AWQ 模型）—— `src/p4_quant_throughput_curve.py`，结果见 `results/p4_0_quant_throughput_b_track.json`（原 `src/results/p4_quant_throughput_result.json`，因 `src/results/` 被 gitignore 从未入库，2026-08-28 迁至顶层）；batch=1/4/8/16/32/64 全部测通，未触发 OOM
 - [x] **[A+B 各自]** 显存占用记录（各记自己那条曲线）—— 仅 B 这一半完成（随上一条一并记录）；A 那一半仍未开始（A 的 P1 尚未完成）
 - [ ] **[A+B 联合]** 合并两条曲线，标出交叉点，写 P4.1 记录 —— 阻塞于 A 的曲线未产出，不在此提交范围内
