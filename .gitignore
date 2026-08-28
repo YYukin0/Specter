@@ -10,3 +10,4 @@ papers/*.pdf
 src/results/
 code/
 .venv-lmeval/
+.playwright-mcp/

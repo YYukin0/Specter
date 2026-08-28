@@ -59,7 +59,7 @@ caught it." Listed strongest-first; the file prefixes are build order.
    bandwidth, and the whole op is ~2% of a target forward. `mx.compile` already
    won.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–24), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–25), the
 build-time ones first.
 
 ---
@@ -127,8 +127,9 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Oracle stack O1/O3/O4/O5 + O2 (real model) | `src/spec_oracles.py`, `src/verify_p6_5_o2.py` | done |
 | Rule-based differential debugger | `src/specdiff.py` | done |
 | Fused Metal kernel for the accept/reject step + roofline case study | `src/metal_accept_kernel.py`, `src/verify_p6_7_metal_roofline.py` | done — **negative result**: 2.6× less memory traffic, ~1.0× the speed; `mx.compile` wins |
+| Serving demo: stdlib HTTP + SSE over the real loop, single-file lab page | `src/serve_http.py`, `docs/site/index.html` | done — `python -m src.serve_http` |
 
-210 tests (`pytest`). Result JSONs for every experiment in `results/`.
+219 tests (`pytest`). Result JSONs for every experiment in `results/`.
 
 ---
 
@@ -177,15 +178,52 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 
 ---
 
+## Demo
+
+The serving loop (`src/serving_loop.py`) behind a stdlib HTTP wrapper — no new
+dependencies — streaming a real speculative-decoding run to a single-file lab
+page over Server-Sent Events:
+
+```bash
+python -m src.serve_http          # loads Qwen2.5 0.5B/1.5B once, serves on :8137
+```
+
+Then open <http://127.0.0.1:8137/>. The **lab** section runs the real loop over
+your prompt and shows the same telemetry the terminal demo prints — per round:
+γ, accept length, rolling acceptance rate α, tok/s, concurrency, circuit-breaker
+state — plus an A/B against speculation-off. The static page
+(`docs/site/index.html`) replays a committed real run
+(`docs/site/sample_run.json`, a 4-prompt batch: speculative 24.6 tok/s vs
+baseline 22.8, **1.08×**) when no backend is up, so it also works as a plain
+GitHub Pages site.
+
+Raw stream, no browser:
+
+```bash
+curl -N -XPOST localhost:8137/generate \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"Write a Python function for the nth Fibonacci number.","max_tokens":128,"spec":true,"compare":true}'
+```
+
+Terminal version (ANSI dashboard, same loop, `--fake` needs no download):
+
+```bash
+python -m demo.live --compare            # or: python -m demo.live --fake
+```
+
+---
+
 ## Layout
 
 ```
 src/            implementation + one verify_*.py driver per experiment
-tests/          210 pytest tests (hermetic + model-gated)
+                serve_http.py — the demo server (stdlib http.server + SSE)
+tests/          219 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
   engineering-notes/   the 8 stories above
-  pitfalls.md          坑1–24
+  pitfalls.md          坑1–25
+  site/                single-file lab page + a recorded real run
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)
 ```

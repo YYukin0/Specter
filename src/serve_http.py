@@ -1,0 +1,275 @@
+"""
+Specter serving demo -- a stdlib HTTP wrapper around `SpecServer`.
+
+No new dependencies (http.server + json + threading). Serves the single-file
+lab page at `/` and streams a live speculative-decoding run over Server-Sent
+Events at `/generate`, so the same telemetry the terminal demo prints
+(src/demo/live.py) shows up in a browser: streamed text, per-round gamma /
+accept length / rolling alpha / tok-s / concurrency / circuit-breaker state.
+
+    python -m src.serve_http                 # real Qwen2.5 0.5B/1.5B, loaded once
+    python -m src.serve_http --fake          # deterministic FakeModel pair, no download
+    python -m src.serve_http --capture out.json   # one real run -> replay file, then exit
+
+Endpoints:
+    GET  /            docs/site/index.html
+    GET  /health      {"ok", "backend", "ready"}
+    GET  /sample      docs/site/sample_run.json  (for the no-backend replay)
+    POST /generate    SSE stream; body:
+                      {"prompt": str, "max_tokens": int<=160,
+                       "spec": bool, "gammatune": bool, "breaker": bool,
+                       "compare": bool, "demo_batch": bool}
+
+Only one generation runs at a time (single Mac GPU); concurrent POSTs get 429.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SITE = ROOT / "docs" / "site"
+sys.path.insert(0, str(ROOT / "src"))
+
+DEMO_PROMPTS = [
+    "Explain in two sentences why the sky is blue.",
+    "Write a Python function that returns the nth Fibonacci number.",
+    "Give me three tips for staying focused while studying.",
+    "Summarize the plot of Cinderella in one paragraph.",
+]
+
+_GEN_LOCK = threading.Lock()
+_STATE = {"backend": "fake", "ready": False, "pair": None, "last": None}
+
+
+# --------------------------------------------------------------------------- #
+# model pair
+# --------------------------------------------------------------------------- #
+def load_pair(fake: bool):
+    if fake:
+        from spec_oracles import LengthOnlyCache, make_fake_pair
+        draft, target, tok = make_fake_pair(phase_target=0.3)
+        return draft, target, tok, LengthOnlyCache, "fake"
+    from model_loader import (DRAFT_MODEL_NAME, TARGET_MODEL_NAME,
+                              load_model_and_tokenizer)
+    from spec_kv import _new_cache
+    draft, _ = load_model_and_tokenizer(DRAFT_MODEL_NAME)
+    target, tok = load_model_and_tokenizer(TARGET_MODEL_NAME)
+    return draft, target, tok, _new_cache, "qwen"
+
+
+# --------------------------------------------------------------------------- #
+# one run -> a generator of SSE event dicts
+# --------------------------------------------------------------------------- #
+def run_stream(body: dict):
+    """Yield (event, data) tuples for one /generate request."""
+    from serving_loop import ServeConfig, SpecServer
+
+    draft, target, tok, make_cache, backend = _STATE["pair"]
+    max_tokens = int(min(max(8, body.get("max_tokens", 96)), 160))
+    demo_batch = bool(body.get("demo_batch"))
+    prompts = DEMO_PROMPTS if demo_batch else [str(body.get("prompt") or DEMO_PROMPTS[0])]
+
+    def _cfg(spec: bool):
+        return ServeConfig(
+            gamma=int(body.get("gamma", 4)), temperature=0.0,
+            max_new_tokens=max_tokens, max_active=4, make_cache=make_cache,
+            spec_enabled=spec,
+            gammatune_on=bool(body.get("gammatune")) and spec,
+            breaker_on=bool(body.get("breaker", True)) and spec,
+            alpha_floor=0.5, warmup_rounds=3, reprobe_every=10,
+            apply_chat_template=True,
+        )
+
+    def _one_pass(spec: bool, tag: str):
+        server = SpecServer(draft, target, tok, _cfg(spec))
+        for i, p in enumerate(prompts):
+            server.submit(p, req_id=f"{tag}{i}", seed=1000 + i)
+        sent = {}
+        t0 = time.perf_counter()
+        emitted = 0
+        modes: dict = {}
+        tps_series = []
+        round_cap = 400
+        while (server.active or server.pending) and server.round_index < round_cap:
+            info = server.step()
+            modes[info.mode] = modes.get(info.mode, 0) + 1
+            emitted += info.emitted
+            el = time.perf_counter() - t0
+            tps = emitted / el if el else 0.0
+            tps_series.append(round(tps, 2))
+            texts = {}
+            for s in server.active:
+                txt = tok.decode(s.token_ids, skip_special_tokens=True) if s.token_ids else ""
+                if txt != sent.get(s.req_id):
+                    sent[s.req_id] = txt
+                    texts[s.req_id] = txt
+            for rid, r in server.results().items():
+                if r.text != sent.get(rid):
+                    sent[rid] = r.text
+                    texts[rid] = r.text
+            yield "round", {
+                "pass": tag, "index": info.index, "mode": info.mode,
+                "gamma": info.round_gamma, "rolling_alpha": round(info.rolling_alpha, 3),
+                "realign_tax": round(info.realignment_overhead, 3),
+                "n_active": info.n_active, "n_queued": info.n_queued,
+                "emitted": info.emitted, "wall_ms": round(info.wall_s * 1e3, 1),
+                "tok_per_s": round(tps, 2), "breaker": info.breaker_reason,
+                "texts": texts,
+            }
+        wall = time.perf_counter() - t0
+        res = server.results()
+        total = sum(len(r.token_ids) for r in res.values())
+        accs = [a for r in res.values() for a in r.accept_lengths]
+        summary = {
+            "pass": tag, "backend": backend, "spec": spec,
+            "prompts": len(prompts), "total_tokens": total,
+            "wall_s": round(wall, 2),
+            "agg_tok_per_s": round(total / wall, 2) if wall else 0.0,
+            "n_rounds": sum(modes.values()), "mode_counts": modes,
+            "mean_accept_len": round(sum(accs) / len(accs), 2) if accs else 0.0,
+            "tps_series": tps_series,
+            "final_texts": {rid: r.text for rid, r in res.items()},
+        }
+        return summary
+
+    yield "start", {"backend": backend, "prompts": prompts, "max_tokens": max_tokens,
+                    "spec": bool(body.get("spec", True)),
+                    "compare": bool(body.get("compare"))}
+
+    gen = _one_pass(bool(body.get("spec", True)), "A")
+    main_summary = yield from gen
+    yield "done", main_summary
+
+    if body.get("compare"):
+        base = yield from _one_pass(False, "B")
+        speedup = (main_summary["agg_tok_per_s"] / base["agg_tok_per_s"]
+                   if base["agg_tok_per_s"] else 0.0)
+        yield "compare_done", {"speculative": main_summary, "baseline": base,
+                               "speedup": round(speedup, 2)}
+
+
+# --------------------------------------------------------------------------- #
+# HTTP
+# --------------------------------------------------------------------------- #
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):  # quiet; signature matches base
+        del format, args
+
+    def _send(self, code, body: bytes, ctype="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/" or self.path.startswith("/index"):
+            f = SITE / "index.html"
+            if not f.exists():
+                return self._send(404, b"index.html not built", "text/plain")
+            return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
+        if self.path == "/health":
+            return self._send(200, json.dumps(
+                {"ok": True, "backend": _STATE["backend"], "ready": _STATE["ready"]}
+            ).encode())
+        if self.path == "/sample":
+            f = SITE / "sample_run.json"
+            if not f.exists():
+                return self._send(404, b"{}", "application/json")
+            return self._send(200, f.read_bytes(), "application/json")
+        return self._send(404, b"not found", "text/plain")
+
+    def do_POST(self):
+        if self.path != "/generate":
+            return self._send(404, b"not found", "text/plain")
+        n = int(self.headers.get("Content-Length", 0))
+        try:
+            body = json.loads(self.rfile.read(n) or b"{}")
+        except json.JSONDecodeError:
+            return self._send(400, b'{"error":"bad json"}')
+
+        if not _GEN_LOCK.acquire(blocking=False):
+            return self._send(429, b'{"error":"busy - one run at a time"}')
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")   # no Content-Length: EOF ends the stream
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.close_connection = True
+            captured = []
+            for event, data in run_stream(body):
+                captured.append({"event": event, "data": data})
+                chunk = f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
+                self.wfile.write(chunk)
+                self.wfile.flush()
+            _STATE["last"] = captured
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            _GEN_LOCK.release()
+
+
+# --------------------------------------------------------------------------- #
+def capture(path: Path):
+    """Run one real generation and dump the SSE timeline for the static replay.
+
+    Prunes the two heavy summary fields (`tps_series`, `final_texts`) the static
+    page never reads, so the committed replay stays small.
+    """
+    body = {"demo_batch": True, "max_tokens": 128, "spec": True,
+            "breaker": True, "compare": True}
+    events = []
+    for e, d in run_stream(body):
+        if isinstance(d, dict):
+            d = {k: v for k, v in d.items() if k not in ("tps_series", "final_texts")}
+            for heavy in ("speculative", "baseline"):
+                if isinstance(d.get(heavy), dict):
+                    d[heavy] = {k: v for k, v in d[heavy].items()
+                                if k not in ("tps_series", "final_texts")}
+        events.append({"event": e, "data": d})
+    path.write_text(json.dumps({"captured": time.strftime("%Y-%m-%d"),
+                                "backend": _STATE["backend"], "events": events}))
+    print(f"wrote {path}  ({len(events)} events, {path.stat().st_size // 1024} KB)")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=8137)
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--fake", action="store_true", help="deterministic FakeModel pair")
+    ap.add_argument("--capture", type=Path, help="one real run -> replay JSON, then exit")
+    args = ap.parse_args()
+
+    print(f"loading {'FakeModel' if args.fake else 'Qwen2.5 0.5B/1.5B'} pair ...")
+    _STATE["pair"] = load_pair(args.fake)
+    _STATE["backend"] = _STATE["pair"][4]
+    _STATE["ready"] = True
+    print("ready.")
+
+    if args.capture:
+        capture(args.capture)
+        return
+
+    srv = ThreadingHTTPServer((args.host, args.port), Handler)
+    url = f"http://{args.host}:{args.port}/"
+    print(f"Specter lab -> {url}   (Ctrl-C to stop)")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nbye")
+        srv.shutdown()
+
+
+if __name__ == "__main__":
+    main()

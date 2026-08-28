@@ -9,7 +9,7 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–24; 坑13–21 on 2026-08-28, 坑22–24 on 2026-08-29)
+## Found while building (坑13–25; 坑13–21 on 2026-08-28, 坑22–25 on 2026-08-29)
 
 ### 坑18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
@@ -199,6 +199,29 @@ element stays `(−∞, 0)`.
 supposed to catch and a "just use realistic sizes" test would miss — the failure
 mode lives at `n_threads > vocab`, a boundary the full-size run never crosses. The
 kernel tests use V = 256 on purpose.
+
+---
+
+### 坑25 — an SSE stream over HTTP/1.1 keep-alive hangs the client forever
+**Where:** P6.8 (支柱7), `src/serve_http.py`.
+
+The first smoke test of the `/generate` endpoint never returned — a 2-minute
+timeout with the server process still alive. `BaseHTTPRequestHandler` with
+`protocol_version = "HTTP/1.1"` keeps the connection alive by default. The
+response had no `Content-Length` (it can't — the stream length isn't known up
+front) and no `Transfer-Encoding: chunked`, so after the last
+`event: done\n\n` the client sat waiting for either more bytes, a length it
+would never get, or a close that never came.
+
+**Fix:** send `Connection: close` and set `self.close_connection = True` on the
+handler, so the socket EOF *is* the end-of-stream signal. The browser's
+`fetch()` reader and `curl -N` both terminate cleanly on EOF. (The alternative —
+implement chunked encoding by hand — buys nothing here; one generation owns the
+connection anyway.)
+
+**Lesson:** "no `Content-Length`" only means "read until EOF" if the server
+actually closes. Under keep-alive it means "hang". Test the client's
+end-of-stream path, not just that bytes arrive.
 
 ---
 
