@@ -220,7 +220,7 @@ Algorithm 1：接受数 A 与当前 γ 相等时扩窗（$\gamma \leftarrow A + 
 **P6.2 — 真实 int4（走 mlx-lm，~1 单元）**
 `src/awq_to_mlx.py` + `src/verify_p6_2_real_int4.py`。四方本地对比：自研 from-scratch AWQ vs `mlx_lm.awq` / `mlx_lm.gptq` / `mlx_lm.dwq`（都 4-bit，都本地 Metal）。验证 P2.1 fake-quant ppl 是否诚实。注意 P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢先，降级为本地顺手确认。
 
-**P6.3 — live demo（~1 单元）** `src/demo/` 终端实时视图（stdlib + ANSI，不装新依赖），基于 `SpecServer`，三开关现场看加速差。
+**P6.3 — live demo（~1 单元）DONE**（本次）。`src/demo/live.py`：stdlib + ANSI 终端 dashboard，零新依赖，基于 `SpecServer`。每轮重绘每序列流式文本 + round/mode/γ/accept-len/滚动α/realign-tax/agg tok-s/并发/队列/熔断器原因。三开关 `--no-spec`（每轮 degraded 纯 target 解码）/ `--gammatune`（`ServeConfig.gammatune_on`，每轮 batch-mean 接受长度跑 `gammatune_update`，demo 级非 per-stream）/ `--no-breaker`；`--compare` 打印 vs spec-off 的 speedup；`--fake` 用 FakeModel 零下载。`serving_loop.py` 加 `spec_enabled`/`gammatune_on`/`gamma_min`/`gamma_max` + `RoundInfo.round_gamma`。真实 smoke（3 prompt×32 tok）：spec+breaker 22.6 tok/s / 16 轮 vs spec-off 24.5 tok/s / 51 轮 = 0.92×（与 P6.0/P6.1 一致：这对模型在这台机器投机打平/微亏，但"轮数少 3×、墙钟持平"看得见）。`tests/test_demo.py` 5 个。asciinema/GIF 是用户手动步骤。
 
 **P6.4 — 打包 + 工程故事（~1 单元）** README 重定位；6 篇工程故事（坑16 确认偏误 / 把 KV cache 做对 / 批量正确性税 / 熔断器真信号 + 前提过时 / fake-quant vs 真 int4 / 测一个投机解码器：输出等价检查漏掉了什么）；坑表（17→~20）当一等公民。
 

@@ -42,6 +42,7 @@ from typing import Deque, Dict, List, Optional, Tuple
 
 import torch
 
+from gammatune import gammatune_update
 from rejection_sampling import collect_eos_ids
 from spec_kv_batch import RoundTelemetry, SeqState, make_seq, run_round
 from spec_kv import _cache_position, _new_cache
@@ -59,6 +60,11 @@ class ServeConfig:
     apply_chat_template: bool = True
     seed_base: int = 0
     make_cache: object = _new_cache      # injectable for hermetic FakeModel tests
+    # demo toggles
+    spec_enabled: bool = True           # False -> every round is plain target decoding
+    gammatune_on: bool = False          # True -> adapt cfg.gamma per round (batch-mean A)
+    gamma_min: int = 1
+    gamma_max: int = 10
     # circuit breaker
     breaker_on: bool = True
     alpha_floor: float = 0.5            # rolling alpha below this -> degrade
@@ -102,6 +108,7 @@ class RoundInfo:
     emitted: int
     wall_s: float
     breaker_reason: str
+    round_gamma: int = 0               # gamma used this round (moves when gammatune_on)
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +140,7 @@ class SpecServer:
         self._spec_rounds_seen = 0
         self._rounds_since_reprobe = 0
         self._last_target_only_ms: Optional[float] = None
+        self._gamma_bar = float(self.cfg.gamma)   # GammaTune EMA (demo toggle)
 
         self.round_log: List[RoundInfo] = []
         self.telemetry: List[RoundTelemetry] = []
@@ -185,6 +193,8 @@ class SpecServer:
     def _decide_mode(self) -> Tuple[str, str]:
         """Return (round_mode, reason). round_mode in {"spec","degraded","probe"}."""
         cfg = self.cfg
+        if not cfg.spec_enabled:
+            return "degraded", "speculation disabled (demo toggle)"
         if not cfg.breaker_on:
             return "spec", "breaker off"
 
@@ -232,7 +242,8 @@ class SpecServer:
 
         if not self.active:
             info = RoundInfo(self.round_index, "idle", 0, n_queued, admitted, [],
-                             self._rolling_alpha(), 0.0, 0, 0.0, "no active sequences")
+                             self._rolling_alpha(), 0.0, 0, 0.0, "no active sequences",
+                             round_gamma=self.cfg.gamma)
             self.round_log.append(info)
             self.round_index += 1
             return info
@@ -242,8 +253,9 @@ class SpecServer:
 
         round_mode, reason = self._decide_mode()
         exec_mode = "degraded" if round_mode == "degraded" else "spec"
+        round_gamma = self.cfg.gamma
 
-        tele = run_round(self.active, self.draft, self.target, gamma=self.cfg.gamma,
+        tele = run_round(self.active, self.draft, self.target, gamma=round_gamma,
                          temperature=self.cfg.temperature, eos_ids=self.eos_ids,
                          device=self.device, dtype=self.dtype, mode=exec_mode)
         self.telemetry.append(tele)
@@ -253,6 +265,14 @@ class SpecServer:
             self._spec_rounds_seen += 1
             for a, e in zip(tele.accepted_per_seq, tele.evaluated_per_seq):
                 self._push_alpha(a, e)
+            if self.cfg.gammatune_on and tele.accepted_per_seq:
+                # demo-level adaptive gamma: one GammaTune update on the batch-mean
+                # accepted length (per-stream control is P5.0; this is the toggle).
+                a_mean = round(sum(tele.accepted_per_seq) / len(tele.accepted_per_seq))
+                new_gamma, self._gamma_bar = gammatune_update(
+                    round_gamma, self._gamma_bar, a_mean,
+                    gmin=self.cfg.gamma_min, gmax=self.cfg.gamma_max)
+                self.cfg.gamma = int(new_gamma)
         if round_mode == "spec":
             self.mode = "spec"
             self._rounds_since_reprobe = 0
@@ -281,6 +301,7 @@ class SpecServer:
             n_queued=n_queued, admitted=admitted, finished=finished,
             rolling_alpha=self._rolling_alpha(), realignment_overhead=tele.realignment_overhead,
             emitted=sum(tele.emitted_per_seq), wall_s=tele.wall_s, breaker_reason=reason,
+            round_gamma=round_gamma,
         )
         self.round_log.append(info)
         self.round_index += 1
