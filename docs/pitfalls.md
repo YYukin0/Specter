@@ -9,7 +9,7 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–23; 坑13–21 on 2026-08-28, 坑22–23 on 2026-08-29)
+## Found while building (坑13–24; 坑13–21 on 2026-08-28, 坑22–24 on 2026-08-29)
 
 ### 坑18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
@@ -176,6 +176,29 @@ decoding params) held **identical** to the baseline.
 **Lesson:** ppl and downstream accuracy are not the same measurement and here they
 don't even agree on sign. "AWQ 4-bit g128" is not one number — the search and
 calibration details decide whether the model can still reason.
+
+---
+
+### 坑24 — a fused Metal kernel NaN'd only when the vocab was smaller than the threadgroup
+**Where:** P6.7 (支柱7 optional), `src/metal_accept_kernel.py`.
+
+The fused accept/reject kernel does a one-pass online softmax per row: each
+thread keeps a running max `m` and running sum-of-exp `s` over its stride of V,
+then the threadgroup merges the `(m, s)` pairs with
+`mM = max(mA, mB); sM = sA·exp(mA−mM) + sB·exp(mB−mM)`. With a 1024-thread
+threadgroup and the real vocab V = 151936, every thread does work and it's fine.
+With V < 1024 (the smoke config, and the V = 256 unit test), the surplus threads
+never enter the sweep and carry the identity `(m, s) = (−∞, 0)`. Two of them
+merging gives `mM = −∞` and `exp(−∞ − (−∞)) = exp(NaN) = NaN`, which then
+propagates through the whole row.
+
+**Fix:** guard the merge — `sM = (mM > −INFINITY) ? (…) : 0`. The identity
+element stays `(−∞, 0)`.
+
+**Lesson:** this is exactly the bug a proportionally-shrunk smoke test is
+supposed to catch and a "just use realistic sizes" test would miss — the failure
+mode lives at `n_threads > vocab`, a boundary the full-size run never crosses. The
+kernel tests use V = 256 on purpose.
 
 ---
 

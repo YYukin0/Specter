@@ -1,0 +1,177 @@
+{
+  "task": "P6.7 fused Metal accept/reject kernel -- roofline case study",
+  "op": "speculative-decoding rejection-sampling verification: (target_logits[g+1,V], draft_logits[g,V], draft_tokens[g], unif[g]) -> (n_accepted, adjusted_row[V])",
+  "config": {
+    "vocab": 151936,
+    "dtype": "float32",
+    "iters": 200,
+    "warmup": 20,
+    "threadgroup": 1024,
+    "single_threadgroup": true
+  },
+  "device": {
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "mlx_version": "0.32.2",
+    "measured_peak_streaming_GBps": 85.97458306738545,
+    "measured_peak_fp32_GFLOPs": 2843.4763088808686,
+    "roofline_ridge_point_flop_per_byte": 33.07345272790912
+  },
+  "correctness": {
+    "cases": 36,
+    "n_accepted_exact": "36/36",
+    "max_adjusted_abs_diff": 9.313225746154785e-10,
+    "tolerance": 1e-06,
+    "within_tol": true,
+    "worst_case": {
+      "gamma": 6,
+      "accept_frac": 0.3,
+      "seed": 1,
+      "ref_n": 0,
+      "fused_n": 0
+    }
+  },
+  "context_vs_model_forward": {
+    "target_forward_ms_batch1": 31.88215844125577,
+    "target_forward_source": "results/p6_2_awq_int4_real.json fp16_mlx decode_tok_s.mean=31.37",
+    "best_accept_step_ms_gamma4": 0.7187500013969839,
+    "accept_step_fraction_of_one_forward": 0.022543956762567104,
+    "note": "temperature>0 path; greedy decoding replaces the two softmaxes with an argmax and the accept step is effectively free."
+  },
+  "latency_and_roofline": {
+    "gamma=2": {
+      "reference_sync": {
+        "median_us": 677.083502523601,
+        "calls_per_s": 1476.9227078681379,
+        "model_bytes_moved": 17624576,
+        "model_flops": 6837120,
+        "arith_intensity_flop_per_byte": 0.3879310344827586,
+        "achieved_GBps": 26.03013651094779,
+        "achieved_vs_peak_bw": 0.30276548698754147,
+        "memory_bound": true
+      },
+      "reference_branchless": {
+        "median_us": 543.9369706436992,
+        "calls_per_s": 1838.4483018622402,
+        "model_bytes_moved": 17624576,
+        "model_flops": 6837120,
+        "arith_intensity_flop_per_byte": 0.3879310344827586,
+        "achieved_GBps": 32.401871818242,
+        "achieved_vs_peak_bw": 0.37687733586152955,
+        "memory_bound": true
+      },
+      "reference_compiled": {
+        "median_us": 491.75001913681626,
+        "calls_per_s": 2033.5535558398765,
+        "model_bytes_moved": 17624576,
+        "model_flops": 6837120,
+        "arith_intensity_flop_per_byte": 0.3879310344827586,
+        "achieved_GBps": 35.84051919497015,
+        "achieved_vs_peak_bw": 0.41687342835822705,
+        "memory_bound": true
+      },
+      "fused_accept": {
+        "median_us": 429.3544334359467,
+        "calls_per_s": 2329.0780812426037,
+        "model_bytes_moved": 6685184,
+        "model_flops": 9116160,
+        "arith_intensity_flop_per_byte": 1.3636363636363635,
+        "achieved_GBps": 15.570315523473754,
+        "achieved_vs_peak_bw": 0.18110370493184014,
+        "memory_bound": true
+      },
+      "_fused_speedup_vs_best_reference": 1.1453241910221896,
+      "_fastest": "fused_accept"
+    },
+    "gamma=4": {
+      "reference_sync": {
+        "median_us": 914.8120298050344,
+        "calls_per_s": 1093.1207367409904,
+        "model_bytes_moved": 29779456,
+        "model_flops": 11395200,
+        "arith_intensity_flop_per_byte": 0.3826530612244898,
+        "achieved_GBps": 32.552540882465905,
+        "achieved_vs_peak_bw": 0.37862981966369946,
+        "memory_bound": true
+      },
+      "reference_branchless": {
+        "median_us": 806.9170289672911,
+        "calls_per_s": 1239.2847890195358,
+        "model_bytes_moved": 29779456,
+        "model_flops": 11395200,
+        "arith_intensity_flop_per_byte": 0.3826530612244898,
+        "achieved_GBps": 36.905226846076545,
+        "achieved_vs_peak_bw": 0.4292574099155659,
+        "memory_bound": true
+      },
+      "reference_compiled": {
+        "median_us": 718.7500013969839,
+        "calls_per_s": 1391.3043451219064,
+        "model_bytes_moved": 29779456,
+        "model_flops": 11395200,
+        "arith_intensity_flop_per_byte": 0.3826530612244898,
+        "achieved_GBps": 41.43228652816663,
+        "achieved_vs_peak_bw": 0.4819132009711834,
+        "memory_bound": true
+      },
+      "fused_accept": {
+        "median_us": 724.437995813787,
+        "calls_per_s": 1380.3803855934757,
+        "model_bytes_moved": 11547136,
+        "model_flops": 16409088,
+        "arith_intensity_flop_per_byte": 1.4210526315789473,
+        "achieved_GBps": 15.939440044180303,
+        "achieved_vs_peak_bw": 0.18539711942176254,
+        "memory_bound": true
+      },
+      "_fused_speedup_vs_best_reference": 0.9921484040736798,
+      "_fastest": "reference_compiled"
+    },
+    "gamma=8": {
+      "reference_sync": {
+        "median_us": 1060.562499333173,
+        "calls_per_s": 942.8958695303185,
+        "model_bytes_moved": 54089216,
+        "model_flops": 20511360,
+        "arith_intensity_flop_per_byte": 0.3792134831460674,
+        "achieved_GBps": 51.00049835253322,
+        "achieved_vs_peak_bw": 0.5932043696281711,
+        "memory_bound": true
+      },
+      "reference_branchless": {
+        "median_us": 1285.833539441228,
+        "calls_per_s": 777.7056433249985,
+        "model_bytes_moved": 54089216,
+        "model_flops": 20511360,
+        "arith_intensity_flop_per_byte": 0.3792134831460674,
+        "achieved_GBps": 42.0654885262248,
+        "achieved_vs_peak_bw": 0.48927819159360814,
+        "memory_bound": true
+      },
+      "reference_compiled": {
+        "median_us": 1107.000047340989,
+        "calls_per_s": 903.3423281254568,
+        "model_bytes_moved": 54089216,
+        "model_flops": 20511360,
+        "arith_intensity_flop_per_byte": 0.3792134831460674,
+        "achieved_GBps": 48.86107830792071,
+        "achieved_vs_peak_bw": 0.5683200379072988,
+        "memory_bound": true
+      },
+      "fused_accept": {
+        "median_us": 1096.750027500093,
+        "calls_per_s": 911.7847959205228,
+        "model_bytes_moved": 21271040,
+        "model_flops": 30994944,
+        "arith_intensity_flop_per_byte": 1.457142857142857,
+        "achieved_GBps": 19.394610865417274,
+        "achieved_vs_peak_bw": 0.22558540179504097,
+        "memory_bound": true
+      },
+      "_fused_speedup_vs_best_reference": 0.9670047620154567,
+      "_fastest": "reference_sync"
+    }
+  },
+  "headline": "At gamma=4 the fused kernel moves 2.6x fewer bytes than the naive model yet runs 0.99x (on par with) the mx.compile'd reference. The roofline says memory-bound (arith intensity ~ 0.4-1.5 flop/byte vs ridge ~ 33), but a single-threadgroup kernel tops out at ~19% of peak bandwidth while MLX fans the op across every GPU core and hits ~48%: less traffic x worse occupancy = a wash. And the whole step is only ~2.3% of one target forward, and zero under greedy. mx.compile on the plain op graph is the right answer.",
+  "total_seconds": 4.4042687909677625
+}

@@ -26,33 +26,40 @@ caught it."
 
 ## Engineering notes
 
-Start here. Each is a self-contained story.
+Start here. Each is a self-contained "a measurement that fooled me, and how I
+caught it." Listed strongest-first; the file prefixes are build order.
 
-1. [A flat curve that matched the hypothesis — because the knob was stuck](docs/engineering-notes/01-confirmation-bias-flat-curve.md)
-   — an AWQ calibration-size ablation that was silently feeding the quantizer
-   the same 512 tokens at every point.
-2. [Getting the KV cache right](docs/engineering-notes/02-getting-the-kv-cache-right.md)
-   — the partial-acceptance rollback anchor is `prefix + n_accepted`, not
-   `prefix + k + 1`; why the wrong formula passes on high-acceptance prompts.
-3. [The batch correctness tax](docs/engineering-notes/03-the-batch-correctness-tax.md)
-   — per-sequence caches give output-equivalence by construction and a flat
-   throughput curve; the realignment cost a padded batch would pay, measured.
-4. [The circuit breaker: a real signal, and a stale premise](docs/engineering-notes/04-circuit-breaker-real-signal.md)
-   — why a batch-blind cost metric makes "always speculate" unbeatable, and the
-   rebuild on a real rolling acceptance rate.
-5. [Fake-quant vs real int4](docs/engineering-notes/05-fake-quant-vs-real-int4.md)
-   — the number you can report depends on which runtime your backend supports;
-   `mlx_lm.gptq` degeneracy as a first-class result.
-6. [Testing a speculative decoder: what output-equivalence checks miss](docs/engineering-notes/06-testing-a-speculative-decoder.md)
-   — an oracle lattice (symbolic / structural / batch / real-model) and the
-   finding that a real-model output oracle is *not* a superset of the symbolic
-   one.
-7. [Perplexity is not accuracy — and it mis-ranked two quantizers](docs/engineering-notes/07-perplexity-is-not-accuracy.md)
+1. [Testing a speculative decoder: what output-equivalence checks miss](docs/engineering-notes/06-testing-a-speculative-decoder.md)
+   — an oracle lattice (symbolic / structural / batch / real-model), ~20 semantic
+   mutation operators, and the finding that a real-model output oracle is *not* a
+   superset of the symbolic one — output-equivalence is the weakest test in the
+   stack at any model fidelity.
+2. [Perplexity is not accuracy — and it mis-ranked two quantizers](docs/engineering-notes/07-perplexity-is-not-accuracy.md)
    — running the self-built AWQ through GSM8K + IFEval: 4-bit costs ~1.4 ppl but
    9.5 points of grade-school math, and perplexity ranks two AWQ implementations
    in the *opposite* order from how they reason.
+3. [Getting the KV cache right](docs/engineering-notes/02-getting-the-kv-cache-right.md)
+   — the partial-acceptance rollback anchor is `prefix + n_accepted`, not
+   `prefix + k + 1`; why the wrong formula passes on high-acceptance prompts.
+4. [A flat curve that matched the hypothesis — because the knob was stuck](docs/engineering-notes/01-confirmation-bias-flat-curve.md)
+   — an AWQ calibration-size ablation that was silently feeding the quantizer
+   the same 512 tokens at every point.
+5. [The batch correctness tax](docs/engineering-notes/03-the-batch-correctness-tax.md)
+   — per-sequence caches give output-equivalence by construction and a flat
+   throughput curve; the realignment cost a padded batch would pay, measured.
+6. [The circuit breaker: a real signal, and a stale premise](docs/engineering-notes/04-circuit-breaker-real-signal.md)
+   — why a batch-blind cost metric makes "always speculate" unbeatable, and the
+   rebuild on a real rolling acceptance rate.
+7. [Fake-quant vs real int4](docs/engineering-notes/05-fake-quant-vs-real-int4.md)
+   — the number you can report depends on which runtime your backend supports;
+   `mlx_lm.gptq` degeneracy as a first-class result.
+8. [A fused Metal kernel that moved 2.6× less memory and ran 1.0× as fast](docs/engineering-notes/08-a-fused-metal-kernel-and-the-roofline.md)
+   — a hand-written kernel for the accept/reject step vs MLX's op graph: the
+   roofline says memory-bound, but a single-threadgroup kernel can't saturate
+   bandwidth, and the whole op is ~2% of a target forward. `mx.compile` already
+   won.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–23), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–24), the
 build-time ones first.
 
 ---
@@ -82,6 +89,13 @@ reinvent either:
   drives GSM8K + IFEval over an OpenAI-compatible endpoint (`local-chat-completions`
   → mlx-lm server), so the from-scratch AWQ model is scored against the same
   baseline on the same config ([note 07](docs/engineering-notes/07-perplexity-is-not-accuracy.md)).
+- **Roofline** — Williams et al.'s roofline model (2009) and the
+  [MLX custom-kernel API](https://ml-explore.github.io/mlx/build/html/dev/custom_metal_kernels.html).
+  [Note 08](docs/engineering-notes/08-a-fused-metal-kernel-and-the-roofline.md)
+  is a textbook roofline case study on the one op unique to speculative decoding;
+  its conclusion — `mx.compile` on a clean op graph beats a single-threadgroup
+  hand kernel — is the expected one, and the note is explicit that it's a
+  calibration exercise, not an optimisation.
 
 The algorithm-level control-flow bugs this repo hunts (off-by-one cache lengths,
 non-contiguous position ramps, swapped distributions) are a **different layer**
@@ -112,8 +126,9 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Fault-injection library (20+ mutation operators) | `src/spec_faultlib.py` | done |
 | Oracle stack O1/O3/O4/O5 + O2 (real model) | `src/spec_oracles.py`, `src/verify_p6_5_o2.py` | done |
 | Rule-based differential debugger | `src/specdiff.py` | done |
+| Fused Metal kernel for the accept/reject step + roofline case study | `src/metal_accept_kernel.py`, `src/verify_p6_7_metal_roofline.py` | done — **negative result**: 2.6× less memory traffic, ~1.0× the speed; `mx.compile` wins |
 
-201 tests (`pytest`). Result JSONs for every experiment in `results/`.
+210 tests (`pytest`). Result JSONs for every experiment in `results/`.
 
 ---
 
@@ -144,6 +159,13 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
   self-built one is 0.2 ppl **better** and 5.5 points **worse** at math (坑23).
 - **Adaptive-γ:** no win on this pair. The acceptance rate is high and stable, so
   there's nothing for a controller to adapt to — confirmed on 3 model pairs.
+- **A hand-written Metal kernel for the accept/reject step ties `mx.compile`.**
+  The fused kernel moves **2.6× fewer bytes** than the naive MLX op graph and
+  runs at **~1.0×** its speed (0.97–1.16× across runs) — a single threadgroup
+  can't get past ~19% of the ~84 GB/s bandwidth peak while MLX's multi-kernel
+  path reaches ~48%. And the whole step is **~2.3% of one target forward** (zero
+  under greedy). Roofline ridge ≈ 33–36 flop/byte; this op sits at ≈ 0.4–1.5,
+  memory-bound (坑24).
 - **Testing:** against ~20 semantic mutation operators, the output-equivalence
   oracles have a mutation score of ~0.56 (greedy) to 0.75 (sampling) — and
   **0.0 against the KV-cache-management fault class**. The real-model greedy
@@ -159,11 +181,11 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 
 ```
 src/            implementation + one verify_*.py driver per experiment
-tests/          201 pytest tests (hermetic + model-gated)
+tests/          210 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
-  engineering-notes/   the 7 stories above
-  pitfalls.md          坑1–23
+  engineering-notes/   the 8 stories above
+  pitfalls.md          坑1–24
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)
 ```

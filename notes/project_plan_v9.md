@@ -248,6 +248,18 @@ P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢
 
 **契约 / 复现**：`self_awq` ppl 在**同一** P6.2 mlx harness 上重算（12.9368），ppl→下游对比无跨-harness caveat；`--ppl-only` flag 可单独复现三臂 ppl。每臂 server 日志实收 801 `POST /v1/chat/completions`（400+400+1 warm-up），空补全/掉请求已排除（Bullet 3 坑3）。`strict-match` 在 chat 模型上是格式检查不是算术检查（fp16 自己只有 0.378）——主指标用 `flexible-extract`（坑22）。产物 `results/p6_6_downstream_eval.json`（含 `perplexity_same_harness` / `headline` / `known_config_differences_between_awq_arms`）。write-up = `docs/engineering-notes/07-perplexity-is-not-accuracy.md`；坑22/坑23 见 §9.2。
 
+**P6.7 —（支柱7 可选）融合 Metal kernel + roofline 案例研究** —— 挑投机解码里**唯一**自有的算子（其余 matmul/norm/RoPE/KV cache/softmax/采样全和普通自回归共用、已被 `mx.fast` / `mlx-lm` 覆盖）：拒绝采样的**验证步** —— 给定 γ 个提议位置上 target/draft 的下一 token 分布，判定接受几个 draft，并在首个拒绝处构造调整分布 `p'(x)=norm(max(0, p_t−p_d))` 供重采样。`src/rejection_sampling.py` 里这是逐 γ 的 Python 标量循环 + 逐行 `torch.softmax`（显然正确、所有正确性测试走的路径）。P6.7 问：把它当批量 GPU 算子，代价多大、单个融合 kernel 能否打过朴素 MLX 图？`src/metal_accept_kernel.py`：`fused_accept` = 一个 `mx.fast.metal_kernel`，单 threadgroup 1024 线程，逐行**一趟 online softmax**（running max + running sum-of-exp 一次扫 V，再 threadgroup 归并）、thread 0 上跑接受扫描、只写**一行**调整分布、原地归一化 —— **不落任何 `[*,V]` 中间量**（朴素 MLX 图落好几个）。三个 MLX 对照臂：`reference_sync`（host sync 拿 n_accepted 再建行）/ `reference_branchless`（纯 lazy 图）/ `reference_compiled`（`mx.compile` 后者）。`src/verify_p6_7_metal_roofline.py` 编排：正确性网格（γ × 接受率 × seed）+ 进程内实测 peak（streaming BW、fp32 GFLOP/s）+ 延迟中位数 + roofline 放置。测试 `tests/test_verify_p6_7_metal_roofline.py`（9：byte/flop 账 + 纯 MLX 参考逻辑 hermetic 常跑，2 个真启 Metal kernel 的按 GPU 门控）。
+
+**结果（V=151936、fp32、本机实测 peak ~84 GB/s BW、~3050 fp32 GFLOP/s、roofline ridge ≈ 33–36 flop/byte；算子小，每个数 ±3–5% 抖动）**：
+
+| γ | reference_compiled µs | fused_accept µs | fused ÷ best-ref | fused 字节 / 朴素模型字节 |
+|--:|---:|---:|---:|---:|
+| 2 | 469 | 405 | 1.16× | 6.7M / 17.6M |
+| 4 | 741 | 729 | 1.02× | 11.5M / 29.8M |
+| 8 | 1100 | 1058 | 0.97× | 21.3M / 54.1M |
+
+正确性：`n_accepted` 36/36 精确；调整行与参考差 < 1e-9（fp32 归约顺序噪声）。**头条 / 负结果**：融合 kernel 搬**少 2.6× 字节**却只跑 **~1.0×** 速度。原因：roofline 说 memory-bound（AI 0.4–1.5 « ridge 36），但 roofline 的"memory-bound"假设你**吃满**带宽；单 threadgroup kernel 只用一个 GPU core → ~16 GB/s = 84 峰值的 **~19%**，MLX 多 kernel 图扇出全部 core → ~40 GB/s = **~48%**。少搬 × 占用率差 2.5× = 打平。而且**整个步骤只占一次 target 前向的 ~2.3%**（fp16 1.5B 解码 31 tok/s → ~32 ms/前向，接受步 0.73 ms），greedy 下更是零（argmax、无 softmax）。**结论**：本栈上 pointwise / 小归约算子，`mx.compile` 干净图就是正解，手写 Metal kernel 是校准练习不是优化。真要赢得把 V 拆到多 threadgroup + 两级归约 —— 那就是重写 MLX kernel 生成器已经在做的事。坑24（V < threadgroup 时 online-softmax 归并 `exp(−∞−(−∞))=NaN`，只在边界 vocab 触发；kernel 测试特意用 V=256）见 §9.2。产物 `results/p6_7_metal_roofline.json`；write-up = `docs/engineering-notes/08-a-fused-metal-kernel-and-the-roofline.md`。
+
 ---
 
 ## 8. 考虑过的其他方案
@@ -303,6 +315,8 @@ P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢
 **坑22（2026-08-29，P6.6 / 支柱7 Bullet 3）**：lm-eval 的 GSM8K 报两个数——`strict-match`（答案要以 `#### <数字>` 出现在固定位置）和 `flexible-extract`（回复里最后一个数字）。套 Qwen2.5 chat template 后模型出的是对话式 CoT、几乎不吐 `####` 锚点，**fp16 基线自己** strict 只有 0.378、flexible 0.648。于是量化 vs 基线的 `strict-match` delta（−22、−17 点）大部分在测"命中格式的频率"而不是"算对的频率"。**应对**：GSM8K 主指标用 `flexible-extract`，`strict-match` 在这套栈上当噪声（两个都留在结果 JSON、write-up 里以 flexible 打头）。是 lm-eval #1841（chat template 悄悄挪分数）的表亲。**教训**：引用某个 metric 变体的 delta 前先搞清它到底奖励什么；基线本身就因为与你的改动无关的原因失分的 metric，不是对你改动的测量。
 
 **坑23（2026-08-29，P6.6 / 支柱7 Bullet 3）**：同一 wikitext-2 harness 上，自研 AWQ 比 fp16 涨 **+1.39 ppl**、`mlx_lm.awq` int4 涨 **+1.60** —— ppl 说自研的是更好的量化器。GSM8K flexible-extract 上顺序**反转**：自研掉 **9.5 点**、`mlx_lm.awq` 掉 **4.0**。prose 上 0.2 ppl 的"优势"对应小学数学上 5.5 点的**劣势**。IFEval 两个都几乎不动（−2.5 / −1.0 点）——伤害专门落在多步推理上（逐权重舍入误差在 CoT 步骤间累积）。两个臂差在 scale/clip 搜索（`mlx_lm.awq` 做完整 AWQ 权重裁剪搜索，自研只做 scale 搜索）+ 校准集 + fp16 回退策略——这些差异在 ppl 上几乎看不出、在 GSM8K 上值 ~5 点。**应对/实践**：ppl 是筛选指标不是验收指标；量化模型上线前至少跑一个需要正确多步输出的任务，eval 配置（chat template、few-shot 格式、解码参数）与基线**逐字一致**。**教训**：ppl 和下游准确率不是同一个测量，这里连符号都不一致；"AWQ 4-bit g128"不是一个数——搜索和校准细节决定模型还能不能推理。
+
+**坑24（2026-08-29，P6.7 / 支柱7 可选）**：`src/metal_accept_kernel.py` 的融合 kernel 逐行做一趟 online softmax，线程各持 running `(m, s)`，再 threadgroup 归并 `mM=max(mA,mB); sM=sA·exp(mA−mM)+sB·exp(mB−mM)`。1024 线程 + 真 vocab V=151936 时每个线程都干活，没事。V < 1024（smoke 配置、V=256 单测）时多余线程从不进扫描、带着 identity `(m,s)=(−∞,0)`，两个这样的线程归并出 `mM=−∞`，`exp(−∞−(−∞))=exp(NaN)=NaN`，污染整行。**应对**：归并加护栏 `sM = (mM > −INFINITY) ? (…) : 0`。**教训**：这正是"按比例缩小的 smoke 测试"该抓、"直接用真实尺寸"会漏的 bug —— 失效模式住在 `n_threads > vocab` 这条全尺寸跑永远跨不过的边界上；kernel 测试特意用 V=256。
 
 ### 9.3 支柱2已知坑
 
