@@ -247,6 +247,22 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 
 ---
 
+### v3 复查（2026-08-28，用户要求"把这几个再 review 一遍"）—— 复查后四条缝都比第一轮判断的更弱
+
+对 A/B/C/D 各自再搜一轮，结论：**没有一条能撑起 headline，缝 D 基本关死，缝 C 近乎必然是 null，缝 A 从"发现"降为"测量"，缝 B 只剩一条很窄的方法学 sliver。**
+
+- **缝 D —— 基本关死。** [arXiv:2507.09019](https://arxiv.org/pdf/2507.09019)《On Evaluating Performance of LLM Inference Serving Systems》已经原样报了这个发现：投机解码 median TPOT 好 1.3×、但 **P99 TPOT 差 1.16×**，"只报 median 就是只看最好情况、忽略 verification failure 时的卡顿"。[AdaSpec, arXiv:2503.05096](https://arxiv.org/pdf/2503.05096) 已是"SLO-aware 自适应投机长度"（draft confidence + 性能模型，高 SLO 达成率下 +66%）。[arXiv:2605.15051](https://arxiv.org/html/2605.15051v1) 已把投机解码延迟模型重拟到 p95/p99。[arXiv:2511.13841](https://arxiv.org/pdf/2511.13841)《Beat the long tail: Distribution-Aware Speculative Decoding》。→ "均值掩盖尾部"+ SLO-aware 自适应 γ + p99 延迟建模全做过。只剩"在对齐差的消费级 pair + unified memory 上确认"这一薄片，是"在我们硬件上复现"不是 novel。**从 headline 拿掉，写作里引 2507.09019 + 提一句我们 P1.4 的 std 曲线（0.42→4.12）与之一致即可。**
+
+- **缝 C —— 近乎必然是 null。** ACL 2026 SELVA/ACDM：domain-matched 标定主要帮 **GPTQ**，"对 AWQ 没有一致收益"，AWQ 的敏感度由 activation 分布失配决定、不是表层 domain。量化推理模型研究：标定 domain 影响 GPTQ，"其余方法不影响"。COVERCAL / FAQ / LLMC / TWLA 已把"标定集 → 下游精度 / ppl"研究透。传导到 **draft 接受率**这一步技术上仍没人做，但先验现在强烈指向"AWQ 接受率几乎不动"（AWQ 稳 + 2607.04244 已证 INT4 drafter 接受率本就几乎不动）。**最多当本地一次 null 确认跑一下，零 headline 潜力。**
+
+- **缝 A —— 从"发现"降为"测量"。** 机制层现在被博客/论文讲清楚了：Apple Silicon ~200 GB/s 总线、verify 时 GPU occupancy 低、"verify k ≈ verify 1"假设在 Mac 上不成立、"投机解码在 Apple Silicon 上比独显更难 break even"。但全是 **单流（MTP / 单请求）** 下测的。**多并发请求 + EQSPEC ragged 重同步 + ~40% realignment tax、在 Metal 上、verify batch 并行很弱**——这个 cell 确实还没人测。但预期结果已被强预测（"Mac 上 batch 帮助更小、realignment tax 大概率让它净负"）。→ 诚实定位：这是一次**测量**（把已知方向的效应在未测 regime 里量出来），不是发现。仍值得做进 P6.1，但别包装成 discovery。
+
+- **缝 B —— 比第一轮判断的更被占，只剩窄 sliver。** vLLM 已在 tree 里带 spec-decode conformance 测试（`tests/spec_decode/e2e`，greedy-equality）。[DiFR / Token-DiFR, arXiv:2511.20621](https://arxiv.org/abs/2511.20621)：按 seed 同步对着可信参照验证输出、明确讨论投机解码、开箱即用于 vLLM。[LLM-42, arXiv:2601.17768](https://arxiv.org/pdf/2601.17768)：decode-verify-rollback 求确定性。[MarginGate, arXiv:2605.30218](https://arxiv.org/pdf/2605.30218) / [BEAVER, arXiv:2512.05439](https://huggingface.co/papers/2512.05439)：verifier 效率。2510.22876 已有 batch 输出等价 oracle（E/P 分数）。一篇 preprints.org 综述已把"verification fidelity regimes"分好类。→ 输出等价检查 / 分布双样本检验 / 非确定性下的 verifier / batch 等价 oracle **全发表过**。**唯一没人做的窄片**（搜索确认："没有任何内容把 DiFR 和 fault injection / mutation testing 联系起来"）：一个**把已知算法 bug 主动种进 spec-decode 实现**（position-id 差 1、KV crop ±1、mask 泄漏、residual 分布采样错、EOS 不同步、bonus token 丢）**再量哪个 oracle 能抓到、灵敏度多少、要多少 token 才抓到**的 mutation/fault-injection 测试 battery。这是把 mutation testing 用到解码算法本身——一个**测试方法学**小交付物，不是研究发现。价值是 portfolio-craft（正好是 Specter 的既定目标），引 vLLM e2e / DiFR / 2510.22876 当先行工作、把"独立可复用 + 主动种障"作为区分点。
+
+**复查后的净结论**：四条缝没有一条改变"没有推翻论文的路"这个判断，反而收得更紧。方向 B 的诚实交付物就三样——(1) KV-correct 解码器 + serving loop + 真实 int4（P6.0–P6.2，工程不是 novelty）；(2) 缝 B 窄版：一个对本项目 spec-decode 实现的 fault-injection 测试 battery，框成"我怎么确保它正确"的 craft 章节；(3) 缝 A 当一篇测量 writeup："unified memory 上的批量投机解码——realignment tax 撞上弱 verify 并行"。缝 C 最多一次 null 确认，缝 D 只在写作里引用。
+
+---
+
 ## 8. 参考文献
 
 - Leviathan et al. 2023, *Fast Inference from Transformers via Speculative Decoding* — 基础算法（已在 `rejection_sampling.py` 引用）。
@@ -261,5 +277,10 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 - AWQ, arXiv:2306.00978 / GPTQ, arXiv:2210.17323 — 量化基线。
 - *Lossless but Not Free: An Empirical Anatomy of Speculative Decoding on Consumer Hardware*, arXiv:2607.17283 — 从零实现 + Apple Silicon + 隔离"量化 Metal 串行 verify"（v3 缝 A / B）。
 - *The Disparate Impacts of Speculative Decoding*, arXiv:2510.02128 — per-task 加速不均、drafter-only 公平性微调（v3 缝 D）。
+- *On Evaluating Performance of LLM Inference Serving Systems*, arXiv:2507.09019 — 投机解码 median TPOT 好 / P99 TPOT 差（v3 复查，关死缝 D）。
+- *AdaSpec: Adaptive Speculative Decoding for Fast, SLO-Aware LLM Serving*, arXiv:2503.05096 — SLO-aware 自适应投机长度（v3 复查，缝 D）。
+- *DiFR: Inference Verification Despite Nondeterminism*, arXiv:2511.20621 — seed 同步下对参照验证输出，含投机解码（v3 复查，缝 B 先行工作）。
+- *LLM-42: Enabling Determinism in LLM Inference with Verified Speculation*, arXiv:2601.17768 / *MarginGate*, arXiv:2605.30218 — verify-rollback / 稀疏 margin 触发验证（v3 复查，缝 B）。
+- ACL 2026 SELVA/ACDM（标定 domain 主要影响 GPTQ，AWQ 对表层 domain 稳）/ COVERCAL, arXiv:2604.24008 — 标定集 → 下游精度（v3 复查，缝 C 近乎必然 null）。
 - ToolSpec arXiv:2604.13519 / SimpleTool arXiv:2603.00030 / AgentSpec arXiv:2608.24004 — 结构化 / tool-call 高接受率、slot-local EMA gating（v3）。
 - *Speculative Decoding and Beyond: An In-Depth Survey*, arXiv:2502.19732 — 最新综述（v3 深挖起点）。
