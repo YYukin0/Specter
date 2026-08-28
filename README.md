@@ -59,7 +59,7 @@ caught it." Listed strongest-first; the file prefixes are build order.
    bandwidth, and the whole op is ~2% of a target forward. `mx.compile` already
    won.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–25), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–26), the
 build-time ones first.
 
 ---
@@ -129,7 +129,7 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Fused Metal kernel for the accept/reject step + roofline case study | `src/metal_accept_kernel.py`, `src/verify_p6_7_metal_roofline.py` | done — **negative result**: 2.6× less memory traffic, ~1.0× the speed; `mx.compile` wins |
 | Demo: self-contained lab page replaying a recorded real run (+ optional live stdlib HTTP/SSE backend) | `docs/site/index.html`, `src/serve_http.py` | done — open the HTML |
 
-220 tests (`pytest`). Result JSONs for every experiment in `results/`.
+221 tests (`pytest`). Result JSONs for every experiment in `results/`.
 
 ---
 
@@ -181,27 +181,43 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 ## Demo
 
 **[`docs/site/index.html`](docs/site/index.html) — open it in a browser.** No
-server, no model download, nothing to keep running: a real run of the serving
-loop (`src/serving_loop.py`) over four prompts was captured token by token on an
-M-series Mac and is embedded in the page, replayed frame for frame. You get the
-per-round telemetry the terminal demo prints — γ, accept length, rolling
-acceptance rate α, tok/s, concurrency, circuit-breaker state — a mode strip for
-the whole run, a throughput trace, and the streamed text, then a second pass
-with speculation off. The recorded run: **speculative 25.9 tok/s vs baseline
-24.6, 1.05×** — parity, as the rest of this README says.
+server, no model download, nothing to keep running: four real runs of the
+serving loop (`src/serving_loop.py`), each a different configuration, were
+captured token by token on an M-series Mac and embedded in the page. A
+segmented control switches between them, so you can watch the same telemetry
+under different conditions instead of reading four numbers off a table:
+
+- **Batch of 4** — four mixed prompts, continuous batching. **1.04×** —
+  parity, as the rest of this README says.
+- **Code gen** — a single, highly predictable completion (write a Fibonacci
+  function). Long accepted drafts give speculation its best case: **1.25×**.
+- **Open-ended prose** — an unpredictable creative continuation. Short
+  accepted drafts, so the draft model's overhead is harder to earn back:
+  **0.80×**.
+- **Breaker trips** — same prose prompt, `alpha_floor` pushed above this
+  pair's normal acceptance rate so the circuit breaker actually trips; the
+  mode strip visibly cycles spec (green) → degraded (red) → probe (amber) and
+  back, the mechanism `docs/engineering-notes/04-circuit-breaker-real-signal.md`
+  describes, happening live instead of asserted in a results JSON.
+
+Each button loads its own recorded run — γ, accept length, rolling acceptance
+rate α, tok/s, concurrency, breaker state — a mode strip for the whole run, a
+throughput trace, and the streamed text, then a second pass with speculation
+off, plus a one-line caption on what to look for.
 
 The folder is self-contained, so it also publishes as-is to GitHub Pages.
 
-To run it live against your own prompts instead of the recording (loads the two
-Qwen models, ~5 GB RAM, for as long as you keep it up):
+To run it live against your own prompts instead of the recordings (loads the
+two Qwen models, ~5 GB RAM, for as long as you keep it up):
 
 ```bash
 python -m src.serve_http        # serves the same page at :8137, /generate does real inference
 ```
 
 The page shows a "run your own prompt" box when it detects that backend.
-`src/serve_http.py --capture docs/site/sample_run.json` regenerates the
-recording. Terminal version of the same loop:
+`src/serve_http.py --capture docs/site/sample_run.json` re-runs every scenario
+in `SCENARIOS` and regenerates the recordings. Terminal version of the same
+loop:
 
 ```bash
 python -m demo.live --compare            # or: python -m demo.live --fake   (no download)
@@ -214,11 +230,11 @@ python -m demo.live --compare            # or: python -m demo.live --fake   (no 
 ```
 src/            implementation + one verify_*.py driver per experiment
                 serve_http.py — the demo server (stdlib http.server + SSE)
-tests/          220 pytest tests (hermetic + model-gated)
+tests/          221 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
   engineering-notes/   the 8 stories above
-  pitfalls.md          坑1–25
+  pitfalls.md          坑1–26
   site/                self-contained lab page + the recorded run it replays
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)

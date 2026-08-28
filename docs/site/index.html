@@ -53,6 +53,7 @@
     padding:20px;margin-top:22px}
   .runmeta{font-family:var(--mono);font-size:11.5px;color:var(--dim);
     border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px}
+  .runcaption{font-size:13px;color:var(--dim);margin:10px 0 14px;min-height:1.4em}
   .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:2px 0 16px}
   .btn{background:var(--head);color:#111;border:0;border-radius:2px;padding:9px 18px;
     font:600 12px/1 var(--sans);letter-spacing:.06em;cursor:pointer}
@@ -138,6 +139,8 @@
       <a href="#livebox" id="live-jump">run your own prompt&nbsp;&darr;</a></span></p>
 
     <div class="panel">
+      <span class="seg" id="scenarios"></span>
+      <p class="runcaption" id="runcaption"></p>
       <div class="runmeta" id="runmeta">loading recorded run&hellip;</div>
 
       <div class="controls">
@@ -192,7 +195,7 @@
     <div class="grid" id="sysgrid"></div>
     <p style="color:var(--dim);font-size:13px;margin-top:16px">
       Model pair throughout: draft <code>Qwen2.5-0.5B-Instruct</code>,
-      target <code>Qwen2.5-1.5B-Instruct</code>. 220 tests
+      target <code>Qwen2.5-1.5B-Instruct</code>. 221 tests
       (<code>pytest</code>); one result JSON per experiment.</p>
   </section>
 
@@ -226,7 +229,7 @@
 
   <footer>
     <div class="wrap" style="padding:0">
-      Full trap log: <a href="../pitfalls.md">docs/pitfalls.md</a> (坑1&ndash;25) &middot;
+      Full trap log: <a href="../pitfalls.md">docs/pitfalls.md</a> (坑1&ndash;26) &middot;
       prior art and layout in the <a href="../../README.md">README</a> &middot;
       runs locally, $0 cloud.
     </div>
@@ -234,7 +237,7 @@
 
 </div>
 
-<script src="sample_run.js"></script>
+<script src="sample_runs.js"></script>
 <script>
 const SYS = [
   ["Rejection-sampling speculative decoder","greedy + sampling, token-exact with its reference","src/rejection_sampling.py"],
@@ -287,12 +290,18 @@ NOTES.forEach(([t,d,m,href])=>ng.insertAdjacentHTML("beforeend",
   `<a class="card" href="${REPO_NOTES}${href}"><h3>${t}</h3><p>${d}</p><div class="meta">${m}</div></a>`));
 
 // ------------------------------------------------------------------ recording
-let RUN = window.SPECTER_RUN || null;
+let RUNS = window.SPECTER_RUNS || null;
 
-async function loadRun(){
-  if(RUN) return RUN;
+async function loadRuns(){
+  if(RUNS) return RUNS;
+  // no-backend fallback: /sample (or the relative file) has only the default
+  // scenario, with no label/caption -- wrap it so the rest of the page doesn't
+  // need to know the difference. Fails silently over file:// (no server, CORS).
   for(const u of ["/sample","sample_run.json"]){
-    try{ const r = await fetch(u); if(r.ok){ RUN = await r.json(); return RUN; } }catch(e){}
+    try{
+      const r = await fetch(u);
+      if(r.ok){ const d = await r.json(); RUNS = {default: {label: "Recorded run", caption: "", ...d}}; return RUNS; }
+    }catch(e){}
   }
   return null;
 }
@@ -396,7 +405,7 @@ function render(ev, d, series){
 }
 
 // ------------------------------------------------------------------ replay
-let SPEED = 1, PLAYING = false;
+let SPEED = 1, PLAYING = false, CURRENT = null, PLAY_TOKEN = 0;
 
 $("speed").addEventListener("click", e=>{
   const b = e.target.closest("button[data-sp]"); if(!b) return;
@@ -414,20 +423,23 @@ function paceTable(events){
 }
 
 async function replay(){
-  const run = await loadRun();
+  const run = RUNS && RUNS[CURRENT];
   if(!run || !run.events){ $("runmeta").textContent = "recorded run not found — serve this folder or open it via a local server."; return; }
   if(PLAYING) return;
   PLAYING = true; $("replay").disabled = true;
-  reset();
-  const series = [];
+  const myToken = PLAY_TOKEN;          // switching scenarios bumps PLAY_TOKEN,
+  reset();                             // which stops this loop below instead
+  const series = [];                   // of stacking a second setTimeout chain
   const delayFor = paceTable(run.events);
   const nRounds = run.events.filter(e=>e.event === "round").length;
   let seen = 0;
   for(const {event, data} of run.events){
+    if(myToken !== PLAY_TOKEN) return; // superseded by a scenario switch
     render(event, data, series);
     if(event === "round"){
       seen++; $("prog").textContent = `round ${seen} / ${nRounds}`;
       await new Promise(r=>setTimeout(r, delayFor({data}) / SPEED));
+      if(myToken !== PLAY_TOKEN) return;
     }
   }
   $("prog").textContent = `done · ${nRounds} rounds`;
@@ -436,10 +448,8 @@ async function replay(){
 }
 $("replay").onclick = replay;
 
-// fill the metadata line + a static end-state so the panel isn't empty on load
-(async ()=>{
-  const run = await loadRun();
-  if(!run || !run.events){ $("runmeta").textContent = "recorded run not found."; return; }
+// static end-state so the panel isn't empty before a replay starts/finishes
+function paintStatic(run){
   const dones = run.events.filter(e=>e.event === "done").map(e=>e.data);
   const cmp = run.events.find(e=>e.event === "compare_done");
   const toks = dones.reduce((a,d)=>a + d.total_tokens, 0);
@@ -448,6 +458,8 @@ $("replay").onclick = replay;
     `${run.captured} · ${run.backend === "qwen" ? "Qwen2.5-0.5B / 1.5B" : run.backend}`
     + ` · ${dones[0] ? dones[0].prompts : "?"} prompts · ${toks} tokens · ${rnds} rounds`
     + ` · speculative pass then baseline pass`;
+  $("runcaption").textContent = run.caption || "";
+  reset();
   const start = run.events.find(e=>e.event === "start");
   if(start) ensureCards(start.data.prompts);
   for(const el of Object.values(cards)) el.classList.remove("live");
@@ -459,6 +471,43 @@ $("replay").onclick = replay;
     }
   }
   if(cmp) render("compare_done", cmp.data, []);
+  $("prog").textContent = "";
+  $("replay").disabled = false;
+  $("replay").innerHTML = "&#9654;&nbsp; Replay";
+}
+
+function buildScenarioBar(){
+  const bar = $("scenarios");
+  bar.innerHTML = "";
+  Object.keys(RUNS).forEach((key,i)=>{
+    const b = document.createElement("button");
+    b.textContent = RUNS[key].label || key;
+    b.dataset.run = key;
+    if(i === 0) b.classList.add("on");
+    bar.appendChild(b);
+  });
+  bar.onclick = e=>{
+    const b = e.target.closest("button[data-run]");
+    if(!b || b.dataset.run === CURRENT) return;
+    selectScenario(b.dataset.run);
+  };
+}
+
+function selectScenario(key){
+  if(!RUNS || !RUNS[key]) return;
+  CURRENT = key;
+  PLAY_TOKEN++;                        // cancel any in-flight replay loop
+  PLAYING = false;
+  [...$("scenarios").children].forEach(b=>b.classList.toggle("on", b.dataset.run === key));
+  paintStatic(RUNS[key]);
+  replay();                            // auto-start: switching scenarios should play
+}
+
+(async ()=>{
+  const runs = await loadRuns();
+  if(!runs){ $("runmeta").textContent = "recorded run not found."; return; }
+  buildScenarioBar();
+  selectScenario(Object.keys(runs)[0]);
 })();
 
 // ------------------------------------------------------------------ live (opt)

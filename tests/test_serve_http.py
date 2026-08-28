@@ -164,11 +164,14 @@ def test_unknown_routes_404(server):
 
 @pytest.mark.usefixtures("server")
 def test_capture_writes_json_and_js_sidecar(tmp_path):
-    # the static page loads the run via <script src="sample_run.js">, not fetch,
-    # so capture must emit both files (the fixture populates serve_http._STATE)
+    # the static page loads the runs via <script src="sample_runs.js">, not
+    # fetch, so capture must emit both files (the fixture populates
+    # serve_http._STATE); <path> itself stays single-run for the /sample route
     out = tmp_path / "run.json"
     serve_http.capture(out)
-    assert out.exists() and (tmp_path / "run.js").exists()
+    assert out.exists()
+    runs_js = tmp_path / "sample_runs.js"
+    assert runs_js.exists()
 
     payload = json.loads(out.read_text())
     assert [e["event"] for e in payload["events"][:1]] == ["start"]
@@ -176,6 +179,40 @@ def test_capture_writes_json_and_js_sidecar(tmp_path):
     assert not any("tps_series" in e["data"] for e in payload["events"]
                    if isinstance(e["data"], dict))
 
-    js = (tmp_path / "run.js").read_text()
-    assert js.startswith("window.SPECTER_RUN = ")
-    assert json.loads(js[len("window.SPECTER_RUN = "):].rstrip().rstrip(";")) == payload
+    text = runs_js.read_text()
+    assert text.startswith("window.SPECTER_RUNS = ")
+    runs = json.loads(text[len("window.SPECTER_RUNS = "):].rstrip().rstrip(";"))
+    assert set(runs) == set(serve_http.SCENARIOS)
+    for key, scen in serve_http.SCENARIOS.items():
+        r = runs[key]
+        assert r["label"] == scen["label"]
+        assert r["caption"] == scen["caption"]
+        assert r["events"][0]["event"] == "start"
+        assert r["events"][-1]["event"] == "compare_done"
+        assert not any("tps_series" in e["data"] for e in r["events"]
+                       if isinstance(e["data"], dict))
+
+
+@pytest.mark.usefixtures("server")
+def test_capture_scenarios_hit_max_tokens_cap_and_floor(tmp_path, monkeypatch):
+    # smoke tests must exercise boundary values, not just shrunk params -- one
+    # scenario body asks for more than the cap (160), one for less than the
+    # floor (8), and capture() must still clamp + finish cleanly for both
+    scenarios = {
+        "cap": {"label": "Cap", "caption": "", "body":
+                {"prompt": "x", "max_tokens": 99999, "spec": True, "compare": False}},
+        "floor": {"label": "Floor", "caption": "", "body":
+                  {"prompt": "x", "max_tokens": 1, "spec": True, "compare": False}},
+    }
+    monkeypatch.setattr(serve_http, "SCENARIOS", scenarios)
+    monkeypatch.setattr(serve_http, "DEFAULT_SCENARIO", "cap")
+
+    out = tmp_path / "run.json"
+    serve_http.capture(out)
+
+    text = (tmp_path / "sample_runs.js").read_text()
+    runs = json.loads(text[len("window.SPECTER_RUNS = "):].rstrip().rstrip(";"))
+    cap_start = next(e["data"] for e in runs["cap"]["events"] if e["event"] == "start")
+    floor_start = next(e["data"] for e in runs["floor"]["events"] if e["event"] == "start")
+    assert cap_start["max_tokens"] == 160
+    assert floor_start["max_tokens"] == 8

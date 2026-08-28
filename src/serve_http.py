@@ -2,9 +2,10 @@
 Specter serving demo -- a stdlib HTTP wrapper around `SpecServer`.
 
 The demo people actually look at is the *static* page `docs/site/index.html`: it
-embeds a recorded real run (`sample_run.js`) and replays it with no server. This
-module is (a) how that recording is produced and (b) an optional live backend so
-you can drive the same page against your own prompts.
+embeds several recorded real runs (`sample_runs.js`) and replays whichever one
+the visitor picks, with no server. This module is (a) how those recordings are
+produced (see SCENARIOS below) and (b) an optional live backend so you can
+drive the same page against your own prompts.
 
 No new dependencies (http.server + json + threading). Serves the lab page at `/`
 and streams a live speculative-decoding run over Server-Sent Events at
@@ -15,7 +16,8 @@ concurrency / circuit-breaker state.
     python -m src.serve_http                 # real Qwen2.5 0.5B/1.5B, loaded once
     python -m src.serve_http --fake          # deterministic FakeModel pair, no download
     python -m src.serve_http --capture docs/site/sample_run.json
-                                             # one real run -> sample_run.json + .js, then exit
+                                             # every SCENARIOS entry -> sample_run.json
+                                             # (default scenario) + sample_runs.js (all), exit
 
 Endpoints:
     GET  /            docs/site/index.html
@@ -48,6 +50,49 @@ DEMO_PROMPTS = [
     "Give me three tips for staying focused while studying.",
     "Summarize the plot of Cinderella in one paragraph.",
 ]
+
+# Named scenarios captured for the static replay page (docs/site/sample_runs.js).
+# Order is the button order on the page. Each `body` is a /generate request dict.
+SCENARIOS = {
+    "batch": {
+        "label": "Batch of 4",
+        "caption": "Four mixed prompts under continuous batching — aggregate "
+                   "throughput over a mixed workload lands at parity on this pair.",
+        "body": {"demo_batch": True, "max_tokens": 128, "spec": True,
+                 "breaker": True, "compare": True},
+    },
+    "codegen": {
+        "label": "Code gen",
+        "caption": "A single, highly predictable completion — long accepted "
+                   "drafts give speculation its best case here.",
+        "body": {"prompt": "Write a Python function that returns the nth "
+                            "Fibonacci number, with a docstring and a doctest.",
+                 "max_tokens": 128, "spec": True, "breaker": True, "compare": True},
+    },
+    "prose": {
+        "label": "Open-ended prose",
+        "caption": "An unpredictable creative continuation — short accepted "
+                   "drafts, so the draft-model overhead is harder to earn back.",
+        "body": {"prompt": "Continue this story in a surprising direction: the "
+                            "lighthouse keeper had not seen another ship in "
+                            "eleven years, until the morning the tide went out "
+                            "and did not come back.",
+                 "max_tokens": 128, "spec": True, "breaker": True, "compare": True},
+    },
+    "breaker": {
+        "label": "Breaker trips",
+        "caption": "Alpha floor pushed above this pair's normal acceptance rate "
+                   "— watch the mode strip flip spec → degraded → "
+                   "probe → spec as the breaker trips and re-probes.",
+        "body": {"prompt": "Continue this story in a surprising direction: the "
+                            "lighthouse keeper had not seen another ship in "
+                            "eleven years, until the morning the tide went out "
+                            "and did not come back.",
+                 "max_tokens": 160, "spec": True, "breaker": True, "compare": True,
+                 "alpha_floor": 0.6, "warmup_rounds": 2, "reprobe_every": 4},
+    },
+}
+DEFAULT_SCENARIO = "batch"
 
 _GEN_LOCK = threading.Lock()
 _STATE = {"backend": "fake", "ready": False, "pair": None, "last": None}
@@ -88,7 +133,9 @@ def run_stream(body: dict):
             spec_enabled=spec,
             gammatune_on=bool(body.get("gammatune")) and spec,
             breaker_on=bool(body.get("breaker", True)) and spec,
-            alpha_floor=0.5, warmup_rounds=3, reprobe_every=10,
+            alpha_floor=float(body.get("alpha_floor", 0.5)),
+            warmup_rounds=int(body.get("warmup_rounds", 3)),
+            reprobe_every=int(body.get("reprobe_every", 10)),
             apply_chat_template=True,
         )
 
@@ -227,19 +274,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 # --------------------------------------------------------------------------- #
-def capture(path: Path):
-    """Run one real generation and dump the SSE timeline for the static replay.
-
-    Writes two files next to each other:
-      <path>            JSON, for the server's /sample route and tooling
-      <path>.js         `window.SPECTER_RUN = {...}` -- so the page replays with
-                        no server and no fetch (works from file:// and Pages)
-
-    Drops the per-round `tps_series` (nothing reads it); keeps `final_texts` so
-    the page can show the finished outputs before the replay starts.
-    """
-    body = {"demo_batch": True, "max_tokens": 128, "spec": True,
-            "breaker": True, "compare": True}
+def _capture_events(body: dict):
+    """Run one /generate body to completion, pruning tps_series as we go."""
     events = []
     for e, d in run_stream(body):
         if isinstance(d, dict):
@@ -248,14 +284,44 @@ def capture(path: Path):
                 if isinstance(d.get(arm), dict):
                     d[arm] = {k: v for k, v in d[arm].items() if k != "tps_series"}
         events.append({"event": e, "data": d})
+    return events
 
-    payload = {"captured": time.strftime("%Y-%m-%d"),
-               "backend": _STATE["backend"], "events": events}
-    blob = json.dumps(payload, separators=(",", ":"))
+
+def capture(path: Path):
+    """Run every scenario in SCENARIOS and dump the SSE timelines.
+
+    Writes:
+      <path>                          JSON, DEFAULT_SCENARIO only -- for the
+                                      server's /sample route and tooling
+      <path.parent>/sample_runs.js    `window.SPECTER_RUNS = {key: {label,
+                                      caption, captured, backend, events}}`
+                                      -- every scenario, so the page replays
+                                      with no server and no fetch (works from
+                                      file:// and Pages)
+
+    Drops the per-round `tps_series` (nothing reads it); keeps `final_texts`
+    so the page can show the finished outputs before the replay starts.
+    """
+    runs = {}
+    for key, scen in SCENARIOS.items():
+        print(f"capturing '{key}' ({scen['label']}) ...")
+        runs[key] = {
+            "label": scen["label"], "caption": scen["caption"],
+            "captured": time.strftime("%Y-%m-%d"), "backend": _STATE["backend"],
+            "events": _capture_events(scen["body"]),
+        }
+
+    default = runs[DEFAULT_SCENARIO]
+    blob = json.dumps({"captured": default["captured"], "backend": default["backend"],
+                       "events": default["events"]}, separators=(",", ":"))
     path.write_text(blob)
-    js = path.with_suffix(".js")
-    js.write_text("window.SPECTER_RUN = " + blob + ";\n")
-    print(f"wrote {path} + {js.name}  ({len(events)} events, {len(blob) // 1024} KB)")
+
+    runs_js = path.parent / "sample_runs.js"
+    runs_blob = json.dumps(runs, separators=(",", ":"))
+    runs_js.write_text("window.SPECTER_RUNS = " + runs_blob + ";\n")
+    n_events = sum(len(r["events"]) for r in runs.values())
+    print(f"wrote {path} + {runs_js.name}  "
+          f"({len(runs)} scenarios, {n_events} events, {len(runs_blob) // 1024} KB)")
 
 
 def main():
@@ -263,7 +329,7 @@ def main():
     ap.add_argument("--port", type=int, default=8137)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--fake", action="store_true", help="deterministic FakeModel pair")
-    ap.add_argument("--capture", type=Path, help="one real run -> replay JSON, then exit")
+    ap.add_argument("--capture", type=Path, help="every SCENARIOS entry -> replay JSON + JS, then exit")
     args = ap.parse_args()
 
     print(f"loading {'FakeModel' if args.fake else 'Qwen2.5 0.5B/1.5B'} pair ...")

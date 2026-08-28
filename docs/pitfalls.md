@@ -9,7 +9,7 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–25; 坑13–21 on 2026-08-28, 坑22–25 on 2026-08-29)
+## Found while building (坑13–26; 坑13–21 on 2026-08-28, 坑22–26 on 2026-08-29)
 
 ### 坑18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
@@ -222,6 +222,35 @@ connection anyway.)
 **Lesson:** "no `Content-Length`" only means "read until EOF" if the server
 actually closes. Under keep-alive it means "hang". Test the client's
 end-of-stream path, not just that bytes arrive.
+
+---
+
+### 坑26 — a circuit-breaker demo scenario that tripped once and never came back
+**Where:** P6.8 polish (支柱7), the "Breaker trips" replay scenario in
+`src/serve_http.py`.
+
+To make the mode strip visibly cycle spec → degraded → probe → spec on the
+demo page, the first attempt pushed `alpha_floor` far above the default (0.92
+vs 0.5) on the theory that "higher floor = trips more reliably." It did trip —
+immediately, on round 2 — but then never recovered: the rolling α for this
+draft/target pair on this prompt oscillates in a band roughly 0.5–0.75, so a
+0.92 floor sat entirely above the band the model could ever reach. Every
+periodic re-probe (坑11's mechanism) measured α, found it still short of 0.92,
+and went straight back to degraded. The strip showed exactly one green bar
+followed by a wall of red with amber re-probe ticks — not the trip-and-recover
+cycle the scenario was supposed to demonstrate.
+
+**Why it's easy to get wrong:** "trip more" and "trip and recover" sound like
+the same knob turned further in the same direction, but they're opposite
+requirements. Reliably tripping wants the floor *above* the band; reliably
+*recovering* wants the floor *inside* the band, so some rounds clear it and
+some don't.
+
+**Fix:** measure the pair's actual rolling-α range on the target prompt first
+(printed the per-round sequence for a scratch run), then set `alpha_floor`
+just inside that band (0.6) rather than safely above it. Confirmed the
+resulting capture actually cycles (spec 53 / degraded 12 / probe 3 rounds,
+several full spec→degraded→probe→spec loops) before committing the recording.
 
 ---
 
