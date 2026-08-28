@@ -1,0 +1,234 @@
+{
+  "task": "P6.5 -- O2 oracle (real model, CPU fp32, greedy-exact)",
+  "models": {
+    "draft": "Qwen/Qwen2.5-0.5B-Instruct",
+    "target": "Qwen/Qwen2.5-1.5B-Instruct",
+    "device": "cpu",
+    "dtype": "float32"
+  },
+  "config": {
+    "gamma": 4,
+    "max_new_tokens": 40,
+    "prompts": [
+      "Explain in one sentence why the sky is blue.",
+      "List three prime numbers.",
+      "What is the capital of France?"
+    ],
+    "operators": [
+      "adjusted_abs_not_relu",
+      "accept_ratio_inverted",
+      "accept_always",
+      "bonus_token_from_draft",
+      "eos_ignored_midblock",
+      "force_accept_first",
+      "pos_id_off_by_one_plus",
+      "pos_id_off_by_one_minus",
+      "pos_id_frozen",
+      "accept_strict",
+      "leniency_injected",
+      "resample_from_target"
+    ]
+  },
+  "model_load_s": 2.3,
+  "A_clean_greedy_exact": {
+    "all_greedy_exact": true,
+    "per_prompt": [
+      {
+        "prompt": "Explain in one sentence why the sky is blue.",
+        "greedy_exact": true,
+        "first_divergence_token": null,
+        "n_tokens_spec": 38,
+        "n_tokens_target_only": 38
+      },
+      {
+        "prompt": "List three prime numbers.",
+        "greedy_exact": true,
+        "first_divergence_token": null,
+        "n_tokens_spec": 21,
+        "n_tokens_target_only": 21
+      },
+      {
+        "prompt": "What is the capital of France?",
+        "greedy_exact": true,
+        "first_divergence_token": null,
+        "n_tokens_spec": 8,
+        "n_tokens_target_only": 8
+      }
+    ]
+  },
+  "B_o2_under_mutation": {
+    "per_operator": [
+      {
+        "operator": "adjusted_abs_not_relu",
+        "o2_caught": true,
+        "first_divergence_per_prompt": [
+          2,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "accept_ratio_inverted",
+        "o2_caught": true,
+        "first_divergence_per_prompt": [
+          2,
+          0,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "accept_always",
+        "o2_caught": true,
+        "first_divergence_per_prompt": [
+          2,
+          0,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "bonus_token_from_draft",
+        "o2_caught": true,
+        "first_divergence_per_prompt": [
+          33,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "eos_ignored_midblock",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "force_accept_first",
+        "o2_caught": true,
+        "first_divergence_per_prompt": [
+          18,
+          0,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "pos_id_off_by_one_plus",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "pos_id_off_by_one_minus",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "pos_id_frozen",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": true
+      },
+      {
+        "operator": "accept_strict",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": false
+      },
+      {
+        "operator": "leniency_injected",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": false
+      },
+      {
+        "operator": "resample_from_target",
+        "o2_caught": false,
+        "first_divergence_per_prompt": [
+          null,
+          null,
+          null
+        ],
+        "error": null,
+        "in_O1_killed": false
+      }
+    ],
+    "o2_caught": [
+      "accept_always",
+      "accept_ratio_inverted",
+      "adjusted_abs_not_relu",
+      "bonus_token_from_draft",
+      "force_accept_first"
+    ],
+    "o1_killed_also_caught_by_o2": [
+      "accept_always",
+      "accept_ratio_inverted",
+      "adjusted_abs_not_relu",
+      "bonus_token_from_draft",
+      "force_accept_first"
+    ],
+    "o1_killed_missed_by_o2": [
+      "eos_ignored_midblock",
+      "pos_id_frozen",
+      "pos_id_off_by_one_minus",
+      "pos_id_off_by_one_plus"
+    ],
+    "o1_missed_but_o2_caught": [],
+    "reading": "O2 (real greedy) catches the accept-logic and adjusted-distribution faults that flip an emitted token, and bonus-provenance once the generation is long enough. It MISSES all three M-POS (cache_position shift/freeze) faults that O1 kills on the FakeModel: a real RoPE model at greedy shrugs off a small/collapsed position error for these prompts where the position-one-hot FakeModel cannot. It also misses eos_ignored_midblock when no prompt actually hits EOS mid-block. Lesson: a real-model output oracle is NOT a superset of the FakeModel one -- the FakeModel over-represents position sensitivity, and structural faults still need O4 + specdiff's UPSTREAM_KV_POS rule (which read the cache_position vector directly), not any output-equivalence check."
+  },
+  "C_batch_invariance_logit_delta": {
+    "n_prompts_in_batch": 3,
+    "max_abs_logit_delta": 0.0,
+    "mean_abs_logit_delta": 0.0,
+    "argmax_agrees": true,
+    "paper_quantized_metal_delta": 0.0058,
+    "reading": "CPU/fp32 single-vs-batched last-token logits are BITWISE identical (max delta 0.0): with a correct attention mask the padded batch positions contribute nothing and the reduction order is unchanged. arXiv:2607.17283's 5.8e-3 is a quantized-Metal backend artefact; the reference algorithm path has no batch non-determinism at all."
+  },
+  "D_specdiff_classification_contract": {
+    "bisect_round": 0,
+    "mechanism": "BACKEND_NONDETERMINISM",
+    "contract_holds": true,
+    "evidence_rule": "committed prefix differs with all structural state equal"
+  },
+  "headline": "O2 clean greedy-exact: PASS (3/3 prompts). O2 catches 5/9 O1-killed operators on the real greedy model; missed ['eos_ignored_midblock', 'pos_id_frozen', 'pos_id_off_by_one_minus', 'pos_id_off_by_one_plus']. Batched-vs-single logit delta 0.0e+00 (<< 5.8e-3 paper). specdiff BACKEND_NONDETERMINISM contract: holds.",
+  "smoke": false
+}
+

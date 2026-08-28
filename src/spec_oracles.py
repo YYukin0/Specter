@@ -22,9 +22,15 @@ and false-negative. The stack layers oracles by how much they can prove:
       distribution, a valid acceptance probability, seed determinism, no commit
       after EOS.
 
-O2 (real model, CPU fp32, greedy exact) and the real-model / null-band form of
-O3 are sketched in the plan and left for the next increment; they need model
-loads and are not part of the hermetic test path.
+O2 (real model, CPU fp32, greedy exact) now lives in src/verify_p6_5_o2.py ->
+results/p6_5_o2_real_model.json (needs model loads, not on the hermetic path).
+Findings: clean greedy speculative == greedy target-only bit-exactly on the real
+CPU/fp32 pair; O2 catches the accept-logic / adjusted-distribution / bonus faults
+but MISSES all three M-POS (cache_position) faults that O1 kills on the
+FakeModel -- a real RoPE model at greedy shrugs off a position shift the
+position-one-hot FakeModel cannot, so a real-model output oracle is NOT a
+superset of the fake one, and M-POS still needs O4 + specdiff's UPSTREAM_KV_POS
+rule. The real-model / null-band form of O3 is still left for a later increment.
 
 Used by src/verify_spec_faultlib.py to score every operator in
 src/spec_faultlib.py -> results/p6_5_mutation_adequacy.json.
