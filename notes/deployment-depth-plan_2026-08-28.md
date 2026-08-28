@@ -133,15 +133,78 @@
 
 ---
 
+### P6.5（v3 复查后新增的**头条交付物**）—— `specdiff`：投机解码故障注入 + 差分调试器（~2.5 个工作单元）
+
+**为什么是这个当头条**：连续四轮文献复查（7+ 个不同检索角度）确认——**没有任何公开发表的、可复用的、框架无关的、"主动种障"式投机解码测试方法学**。相邻工作全部各差一步：
+- vLLM `tests/spec_decode/e2e`（in-tree greedy-equality，引擎绑定，非论文，无故障注入）。
+- 《Batch Speculative Decoding Done Right》arXiv:2510.22876 —— 形式化了**批量**不变量、对着真实 repo 做差分测试，但交付的是 EQSPEC/EXSPEC 两个**实现**，不是测试套件，没有主动种障，只覆盖 batch。
+- Ekka arXiv:2606.04594（ICML 2026）—— agentic 差分 root-cause，针对 vLLM/SGLang 的**静默质量退化**，$30/case，非投机解码专用，非故障注入，重。
+- DiFR arXiv:2511.20621 / LLM-42 arXiv:2601.17768 / MarginGate arXiv:2605.30218 —— 验证一条 trace 在非确定性下自洽，不是"测你的实现有没有 bug"。
+- 《The Illusion of Equivalence》arXiv:2604.15409 / 《The Residual Stream Is All You Need》arXiv:2603.19664 —— 刻画 KV cache ON/OFF 在 FP16 下的分歧，不是测试工具。
+
+**这个空缺是真的。** Specter 又刚好有别人没有的东西：`rejection_sampling.py` 里现成的 `injection=` 钩子 + position-one-hot 确定性 FakeModel。P6.5 就是把它挖深成一个完整工件。
+
+#### Part 1 —— oracle 栈（"正确"是一个格，不是一个断言）
+
+FP 非确定性让朴素 exact-match 既有假阳也有假阴。分层：
+- **O1 —— FakeModel 下符号级 exact-match。** position-one-hot 确定性假模型，无 FP 噪声。`speculative_generate_kv(temp=0)` 必须逐 token 等于 `target_only_generate`。**唯一的精确 oracle**，这里任何分歧都是真 bug。
+- **O2 —— 真实模型、CPU fp32、greedy exact-match。** 按 arXiv:2607.17283，量化 / Metal logits 不是 batch-invariant，所以 oracle 跑在 batch-invariance 成立的 CPU fp32 上。`spec == vanilla` 逐 token。
+- **O3 —— 真实模型、采样模式、双样本检验。** 固定 RNG 流，N≈10k token，spec vs vanilla token 直方图做 χ²/TV 双样本 + 逐位置 KL。**关键手法（没人写过）**：先跑 vanilla-vs-vanilla（不同 batch 形状）标定 argmax-tie + FP 噪声的 null 带，O3 的判据是"超出预标定 null 带 kσ"，不是绝对阈值。
+- **O4 —— 结构不变量断言（常开）。** 不是输出等价，是算法每步必须满足的内部不变量：KV 长度（接受 k/γ 后 `len(target_cache)==prefix+k+1`、`len(draft_cache)==prefix+k`）；position id 连续单调；mask 行和 == cache 长度；`sum(adjusted_distribution)==1±1e-5` 且 ≥0；`0≤p_accept≤1`；同 seed → 同 accept/reject 序列；EOS 后不再提交 token。
+
+#### Part 2 —— 变异算子库（故障目录，投机解码专用）
+
+对 `rejection_sampling.py` + `spec_kv.py` 的可开关 monkeypatch context manager。分组：
+- **M-KV（cache 管理）**：`kv_crop_off_by_one_±`；`kv_no_draft_crop`（reject 时不裁 draft cache，留陈旧 KV）；`kv_crop_absolute_vs_relative`（给 `.crop()` 传正数走 legacy 语义）；`kv_swap_draft_target_crop`；`kv_skip_bonus_position`。
+- **M-POS（位置 / mask）**：`pos_id_off_by_one`；`pos_id_frozen`（γ 个 verify token 复用同一 pos id）；`mask_leak_future`（verify token i 能看到 i+1..γ）；`mask_left_pad_drift`（每轮多累积一个 pad —— 复现 2510.22876 的 BSP signature）。
+- **M-SAMPLE（rejection sampling 数学）**：`resample_from_target_not_adjusted`；`adjusted_no_renormalize`；`adjusted_abs_not_relu`；`accept_ratio_inverted`（`min(1,q/p)` 而非 `p/q`）；`accept_threshold_strict`（只在 `p≥q` 接受、丢掉随机抽样）；`bonus_token_from_draft`；`bonus_token_dropped`；`leniency_injected`（偷偷 `l·q/p`，l=1.05 —— 测 O3 的 null 带够不够紧、能不能抓到 5% 的分布偏差）。
+- **M-CTRL（投机控制）**：`gamma_off_by_one_verify`；`accept_count_desync`（context 进 k+1 但 cache 进 k）；`eos_ignored_midblock`。
+
+#### Part 3 —— 打分：投机解码的 mutation adequacy
+
+每个 mutant × 每个 oracle：kill / survive / equivalent-mutant，加**检出延迟**（多少 token / 多少测试 prompt 才 trip）、**检出裕度**（O3 里超 null 带几个 σ）。头条数字：每个 oracle 的 mutation score；**哪些 mutant 只有 O4 不变量能抓、会从输出等价测试里溜过去**（这就是"要发布不变量断言、不能只发 parity 测试"的论据）；哪些 mutant 是 equivalent（例如 `bonus_token_from_draft` 在该位置 draft==target 时——构造上不可检，这本身是个 finding）。
+
+#### Part 4 —— 差分调试器 `specdiff bisect`
+
+O2/O3 报分歧时（真 bug 或 blind 模式下的注入 mutant），定位：
+1. **轮次二分**：lockstep 重跑 spec + vanilla，每轮后 hash 已提交 token 前缀，第一个 hash 不同的轮 = 肇事轮 R。
+2. **R 轮内状态转储**：结构化 diff —— draft 提案 + logits；target verify logits（逐位置）；逐位置 accept/reject 决定 + 随机抽样值 + 阈值；首个 reject 处的 `adjusted_distribution`；KV 长度（draft & target，裁剪前后）；position id；mask 行和；RNG 计数器。
+3. **机制分类器**（规则式）：拿状态 diff 匹配签名 —— R 轮 target verify logits ≠ 在 R 处全量重算 → **上游 KV/pos 损坏**（指到 cache 状态最早分歧的轮）；logits 一致但 accept/reject 决定不同 → **采样数学故障**（报是阈值 / adjusted dist / 比值方向哪个）；决定一致但提交数不同 → **控制 / desync 故障**；全都一致、只在 MPS/int4 上分歧 → **后端 batch-invariance**（引 2607.17283，不是算法 bug）。
+4. 输出：排序的 `(轮 R, 机制, 证据)` —— 和 Ekka 报告同形状，但规则式、本地、免费、投机解码专用。
+
+#### Part 5 —— 在什么上演示
+
+- 全 mutant battery 打 Specter 自己的 `spec_kv.py`（P6.0）和 `spec_kv_batch.py`（P6.1）→ 发布 adequacy 矩阵。
+- 开 `mask_left_pad_drift` + `kv_no_draft_crop` 复现 2510.22876 的 BSP 失败签名 → 调试器定位到"position-id 不连续，第 2 轮"，对上他们描述的"渐进退化 → KV drift → 重复"。
+- 无 mutant、O2 跑 MPS int4 → 调试器分类为"后端 batch-invariance，非算法"并量化 logit delta（对标论文 ~5.8e-3 量级）。
+- **blind mutant hunt**：别人开一个随机 mutant，调试器报是哪个。报准确率。
+
+#### Part 6 —— 产出物
+
+`src/spec_faultlib.py`（算子目录 + 开关注册 + monkeypatch context manager）、`src/spec_oracles.py`（O1–O4 + null 带标定）、`src/specdiff.py`（bisect + 分类器 CLI）、`tests/test_spec_faultlib.py`（元测试：每个 mutant 确实改了行为；每个 oracle 确实能杀它对应那类）、`results/p6_5_mutation_adequacy.json`（矩阵，≥3 seed）、`notes/` writeup《测一个投机解码器：输出等价检查漏掉了什么》。
+
+#### 诚实边界
+
+- "mutation testing" 概念是 1970 年代的；新的是**投机解码专用算子目录 + spec-decode oracle 栈 + 规则式机制分类器**，不是元思想。按这个措辞讲。
+- equivalent mutant（构造上不可检）要人工分诊，留预算。
+- 机制分类器是规则式、会有盲区，范围限定在算子目录内，不吹通用性。
+- 与 P6.0/P6.1 双用：它本来就是那两阶段的正确性骨架。$0、本地、无新依赖（纯 Python + 现有 FakeModel + torch）。
+
+**文献核对**：见 §7「C6」。四轮复查确认空缺。
+
+---
+
 ## 3. 依赖顺序
 
 ```
 P6.0 (keystone) ──> P6.1 ──> P6.3 ──> P6.4
-      │                              ↑
-      └──> P6.2 ─────────────────────┘   (P6.2 与 0/1 独立，可穿插)
+      │      │        │                 ↑
+      │      └───> P6.5 (头条) ─────────┤   (P6.5 边做 P6.0/6.1 边长出来，是它俩的正确性骨架)
+      │                                 │
+      └──> P6.2 ────────────────────────┘   (P6.2 与 0/1 独立，可穿插)
 ```
 
-P6.0 先做。P6.2 任何时候能插。P6.4 最后。
+P6.0 先做。**P6.5 与 P6.0 并行起步**（O1/O4 + M-SAMPLE/M-CTRL 算子只依赖 `rejection_sampling.py`，不等 KV cache），P6.0 一落地就补 M-KV/M-POS + O2；P6.1 落地再扩到 batch。P6.2 任何时候能插。P6.4 最后。
 
 ---
 
@@ -154,7 +217,8 @@ P6.0 先做。P6.2 任何时候能插。P6.4 最后。
 | P6.2 真实 int4：from-scratch vs mlx-lm awq/gptq/dwq | ~1 单元 | 0 |
 | P6.3 live demo | ~1 单元 | 0 |
 | P6.4 打包 + 写作 | ~1 单元 | 0 |
-| **合计** | **~7 个专注单元，全本地** | **$0** |
+| **P6.5 `specdiff` 故障注入 + 差分调试器（头条）** | **~2.5 单元** | 0 |
+| **合计** | **~9.5 个专注单元，全本地** | **$0** |
 
 ---
 
@@ -166,15 +230,16 @@ P6.0 先做。P6.2 任何时候能插。P6.4 最后。
 - 自研 AWQ 的**真实内存/速度数字** + 与 mlx-lm awq/gptq/dwq 的四方对比（含本地 GPTQ）。
 - 一个 live demo。
 - 5 篇以坑表为骨架的工程故事。
-- 项目定性：从"复现三篇论文" → "从零造了个能用的加速推理服务，且对每个难点都诚实"。
+- **P6.5：第一个公开的、投机解码专用的故障注入测试方法学 + 差分调试器**。产出一个可引用的 finding —— mutation-adequacy 矩阵显示**哪类投机解码 bug 对输出等价测试不可见、必须靠不变量断言**。这是整个方案里唯一"没人做过"的部分（四轮文献复查确认，见 §7 C6）。
+- 项目定性：从"复现三篇论文" → "从零造了个能用的加速推理服务，对每个难点都诚实，**并且造了一套别人还没有的测试它的工具**"。
 
 ---
 
 ## 6. 开工前要同步的事
 
-- 方案落地时把支柱6 / P6.0–P6.4 加进 `TASKS.md` 和 `notes/project_plan_v9.md` §7。
-- P6.0 的三向 parity 契约、P6.1 的输出等价不变量写进 `project_plan_v9.md` §9.2 作为新验收纪律。
-- §7 里 challenge 出来的三条（C1 SpecKV 抢先、C3 ragged tensor 正确性、C4 熔断器前提过时）在 P6 真正动手撞上时，按 repo 规则7 转成 §9.2/§9.3 的坑18/19/20；现在先留在本文档。
+- 方案落地时把支柱6 / P6.0–P6.5 加进 `TASKS.md` 和 `notes/project_plan_v9.md` §7。**P6.5 是头条交付物**。
+- P6.0 的三向 parity 契约、P6.1 的输出等价不变量、**P6.5 的 O1–O4 oracle 栈**写进 `project_plan_v9.md` §9.2 作为新验收纪律。
+- §7 里 challenge 出来的（C1 SpecKV 抢先、C3 ragged tensor 正确性、C4 熔断器前提过时）在 P6 真正动手撞上时，按 repo 规则7 转成 §9.2/§9.3 的坑18/19/20；现在先留在本文档。
 - **`AGENTS.md` / `contracts/` 这套本仓库当前没有**（早期实验版已随那条废弃 `main` 丢弃，旧 ADR 引用已全指向 `project_plan_v9.md`）。solo 仓库不值得为流程而流程重建 ADR 体系 —— 决策继续记进 `project_plan_v9.md` §7/§8 和 agent 记忆即可。除非之后真有跨人协作需求，否则不建。
 - Web 版 demo → 需要用户批准加 FastAPI 依赖。
 
@@ -263,6 +328,23 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 
 ---
 
+### C6（第四轮复查，用户："再仔细找找是不是真没有人公开发表；没有的话把工程深度挖深"）—— 确认空缺，缝 B 升级为 P6.5 头条交付物
+
+又从 7+ 个检索角度确认「公开发表的、可复用的、投机解码专用的、主动种障式测试方法学」这个空缺是真的：
+
+| 检索角度 | 命中 | 差在哪 |
+|---|---|---|
+| `"speculative decoding" + "fault injection"/"mutation testing" + test suite` | 无命中（通用软件 mutation testing：Meta ACH、LLMorpheus、BugFarm、Mull、µBERT…） | 全是通用代码，不碰解码算法 |
+| LLM 推理引擎差分测试 / bug 检测 | **Ekka, arXiv:2606.04594（ICML 2026）**：agentic 差分 root-cause，HF 当 oracle，对齐 vLLM/SGLang 中间状态，输出可疑组件排序报告，17 个真 bug 上 80% pass@1、新发现 4 个 | 针对**静默质量退化**，$30/case，非投机解码专用，非主动种障，重量级 agentic；明确"不适用并发 bug / 无稳定分歧 trace 的情况" |
+| verifier / 非确定性下验证 | DiFR (2511.20621) / LLM-42 (2601.17768) / MarginGate (2605.30218) / BEAVER (2512.05439) | 验证一条 trace 自洽，不是"测你的实现有没有 bug" |
+| KV cache ON/OFF 等价性质 | 《The Illusion of Equivalence》2604.15409（FP16 下确有分歧）/《The Residual Stream Is All You Need》2603.19664（精确算术下 bit-identical，greedy 30/30 token 一致） | 刻画现象，不是测试工具 |
+| property-based testing + 文本生成 / KV cache | 无专门工件；2510.22876 是**唯一**形式化"批量投机解码必须维持哪些不变量"的，但交付 EQSPEC/EXSPEC 实现、无主动种障、只 batch | — |
+| `"speculative sampling"` 回归测试 harness / HF assisted generation | 无命名工件；验证逻辑内嵌在各 reference 实现和 `transformers` assisted generation 代码里 | 没有独立可复用的 |
+
+**结论**：空缺确认。缝 B 从"窄 sliver"**升级为方案头条交付物 P6.5**（见 §2）。挖深后的形态：O1–O4 分层 oracle 栈（含没人写过的 null 带预标定手法）+ 20+ 条投机解码专用变异算子目录（M-KV / M-POS / M-SAMPLE / M-CTRL）+ mutation-adequacy 矩阵（可引用的 finding：**哪类 bug 对输出等价测试不可见**）+ 规则式差分调试器 `specdiff bisect`（轮次二分 → R 轮状态转储 → 机制分类器，和 Ekka 同形状但规则式、本地、免费、投机解码专用）。演示：打自己的 P6.0/P6.1、复现 2510.22876 的 BSP 签名、把 2607.17283 的 batch-invariance 效应分类成"非算法"、blind mutant hunt。诚实边界：mutation testing 元思想是老的，新的是**领域算子目录 + oracle 栈 + 机制分类器**。
+
+---
+
 ## 8. 参考文献
 
 - Leviathan et al. 2023, *Fast Inference from Transformers via Speculative Decoding* — 基础算法（已在 `rejection_sampling.py` 引用）。
@@ -284,3 +366,8 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 - ACL 2026 SELVA/ACDM（标定 domain 主要影响 GPTQ，AWQ 对表层 domain 稳）/ COVERCAL, arXiv:2604.24008 — 标定集 → 下游精度（v3 复查，缝 C 近乎必然 null）。
 - ToolSpec arXiv:2604.13519 / SimpleTool arXiv:2603.00030 / AgentSpec arXiv:2608.24004 — 结构化 / tool-call 高接受率、slot-local EMA gating（v3）。
 - *Speculative Decoding and Beyond: An In-Depth Survey*, arXiv:2502.19732 — 最新综述（v3 深挖起点）。
+- *Ekka: Automated Diagnosis of Silent Errors in LLM Inference*, arXiv:2606.04594（ICML 2026）— agentic 差分 root-cause，vLLM/SGLang，HF 当 oracle（C6，P6.5 先行工作）。
+- *DIVERSED: Relaxed Speculative Decoding via Dynamic Ensemble Verification*, arXiv:2604.07622（AISTATS 2026）— draft/target 分布混合 verifier、Static Ensemble Pareto（复查，抢先"量化误差掩盖"的机制）。
+- *Fuzzy Speculative Decoding*, arXiv:2502.20704 / *A Practical Investigation of Training-free Relaxed Speculative Decoding*, arXiv:2607.08690 — 可调 leniency（复查，机制已饱和）。
+- *The Illusion of Equivalence: Systematic FP16 Divergence in KV-Cached Autoregressive Inference*, arXiv:2604.15409 / *The Residual Stream Is All You Need*, arXiv:2603.19664 — KV cache ON/OFF 等价性质（C6，P6.5 的 O2/O3 容差设计先行工作）。
+- QSpec, arXiv:2410.11305 / *Speculative Decoding Meets Quantization*（SpecMQuant）, arXiv:2505.22179 — 量化 × 投机解码耦合（复查）。
