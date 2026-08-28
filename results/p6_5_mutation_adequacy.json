@@ -1,0 +1,507 @@
+{
+  "task": "P6.5 mutation-adequacy matrix -- speculative-decoding fault operators x oracle stack",
+  "model": "deterministic position-one-hot FakeModel (hermetic)",
+  "gammas": [
+    1,
+    3,
+    5
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_operators": 17,
+  "n_deferred_operators": 5,
+  "deferred_operators": {
+    "mask_leak_future": "P6.1",
+    "mask_left_pad_drift": "P6.1",
+    "kv_swap_draft_target_crop": "P6.1",
+    "accept_count_desync": "P6.1",
+    "gamma_off_by_one_verify": "step-level rewrite"
+  },
+  "oracle_mutation_scores_excl_equivalent": {
+    "O1": 0.5625,
+    "O3": 0.75,
+    "O4": 0.25,
+    "any_oracle": 1.0
+  },
+  "partition": {
+    "caught_only_by_O3": [
+      "resample_from_target",
+      "accept_strict",
+      "leniency_injected"
+    ],
+    "caught_only_by_O4": [
+      "adjusted_no_renormalize",
+      "kv_crop_off_by_one_minus",
+      "kv_crop_off_by_one_plus",
+      "kv_no_crop"
+    ],
+    "caught_by_O1": [
+      "adjusted_abs_not_relu",
+      "accept_ratio_inverted",
+      "accept_always",
+      "bonus_token_from_draft",
+      "eos_ignored_midblock",
+      "force_accept_first",
+      "pos_id_off_by_one_plus",
+      "pos_id_off_by_one_minus",
+      "pos_id_frozen"
+    ],
+    "equivalent": [
+      "kv_crop_absolute_vs_relative"
+    ]
+  },
+  "headline": {
+    "caught_only_by_O4_structural_invariants": [
+      "adjusted_no_renormalize",
+      "kv_crop_off_by_one_minus",
+      "kv_crop_off_by_one_plus",
+      "kv_no_crop"
+    ],
+    "meaning": "these speculative-decoding bugs pass both greedy AND sampling output-equivalence checks; only an internal structural-invariant assertion detects them. Publishing parity tests alone would let them through.",
+    "caught_only_by_O3_distributional": [
+      "resample_from_target",
+      "accept_strict",
+      "leniency_injected"
+    ],
+    "caught_only_by_O3_meaning": "no-ops in greedy decoding (one-hot distributions); require a sampling-mode / distributional oracle.",
+    "equivalent_mutants": [
+      "kv_crop_absolute_vs_relative"
+    ]
+  },
+  "operators": [
+    {
+      "operator": "resample_from_target",
+      "group": "M-SAMPLE",
+      "partition": "caught_only_by_O3",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 7.738095238095238
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "adjusted_no_renormalize",
+      "group": "M-SAMPLE",
+      "partition": "caught_only_by_O4",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": false,
+        "n_runs": 126,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O4": {
+        "killed": true,
+        "n_runs": 90,
+        "n_violation_hits": 1954,
+        "violations": [
+          "adjusted_distribution sum=0.233913 != 1",
+          "adjusted_distribution sum=0.246232 != 1",
+          "adjusted_distribution sum=0.250498 != 1",
+          "adjusted_distribution sum=0.254635 != 1"
+        ]
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "adjusted_abs_not_relu",
+      "group": "M-SAMPLE",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 3.7777777777777777
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 8.079365079365079
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "accept_ratio_inverted",
+      "group": "M-SAMPLE",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 0.4444444444444444
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 3.0396825396825395
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "accept_always",
+      "group": "M-SAMPLE",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 0.4444444444444444
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 4.944444444444445
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "accept_strict",
+      "group": "M-SAMPLE",
+      "partition": "caught_only_by_O3",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 1.8015873015873016
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "leniency_injected",
+      "group": "M-SAMPLE",
+      "partition": "caught_only_by_O3",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 71,
+        "mean_first_divergence_token": 20.859154929577464
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "bonus_token_from_draft",
+      "group": "M-SAMPLE",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 30,
+        "mean_first_divergence_token": 1.6666666666666667
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 117,
+        "mean_first_divergence_token": 15.350427350427351
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "eos_ignored_midblock",
+      "group": "M-CTRL",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 5.0
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 4.468253968253968
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "force_accept_first",
+      "group": "M-CTRL",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 0.6666666666666666
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 9.992063492063492
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "kv_crop_off_by_one_minus",
+      "group": "M-KV",
+      "partition": "caught_only_by_O4",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": false,
+        "n_runs": 126,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O4": {
+        "killed": true,
+        "n_runs": 90,
+        "n_violation_hits": 18816,
+        "violations": [
+          "draft cache len 10 != committed-1 11",
+          "draft cache len 11 != committed-1 12",
+          "draft cache len 12 != committed-1 13",
+          "draft cache len 13 != committed-1 14"
+        ]
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "kv_crop_off_by_one_plus",
+      "group": "M-KV",
+      "partition": "caught_only_by_O4",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": false,
+        "n_runs": 126,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O4": {
+        "killed": true,
+        "n_runs": 90,
+        "n_violation_hits": 14862,
+        "violations": [
+          "draft cache len 10 != committed-1 9",
+          "draft cache len 11 != committed-1 10",
+          "draft cache len 12 != committed-1 11",
+          "draft cache len 13 != committed-1 12"
+        ]
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "kv_crop_absolute_vs_relative",
+      "group": "M-KV",
+      "partition": "equivalent",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": false,
+        "n_runs": 126,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": "On transformers 5.16 a positive crop arg and the negative form leave the same cache length when n < current; they differ only by a deprecation warning and removal at 5.18. True behavioural equivalent here."
+    },
+    {
+      "operator": "kv_no_crop",
+      "group": "M-KV",
+      "partition": "caught_only_by_O4",
+      "O1": {
+        "killed": false,
+        "n_runs": 90,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O3": {
+        "killed": false,
+        "n_runs": 126,
+        "n_diverged": 0,
+        "mean_first_divergence_token": null
+      },
+      "O4": {
+        "killed": true,
+        "n_runs": 90,
+        "n_violation_hits": 14862,
+        "violations": [
+          "draft cache len 10 != committed-1 7",
+          "draft cache len 10 != committed-1 8",
+          "draft cache len 10 != committed-1 9",
+          "draft cache len 100 != committed-1 35"
+        ]
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "pos_id_off_by_one_plus",
+      "group": "M-POS",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 0.6666666666666666
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 1.6349206349206349
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "pos_id_off_by_one_minus",
+      "group": "M-POS",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 2.6666666666666665
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 3.0714285714285716
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    },
+    {
+      "operator": "pos_id_frozen",
+      "group": "M-POS",
+      "partition": "caught_by_O1",
+      "O1": {
+        "killed": true,
+        "n_runs": 90,
+        "n_diverged": 90,
+        "mean_first_divergence_token": 0.0
+      },
+      "O3": {
+        "killed": true,
+        "n_runs": 126,
+        "n_diverged": 126,
+        "mean_first_divergence_token": 0.5714285714285714
+      },
+      "O4": {
+        "killed": false,
+        "n_runs": 90,
+        "n_violation_hits": 0,
+        "violations": []
+      },
+      "equivalent_note": ""
+    }
+  ],
+  "elapsed_s": 50.22134887508582
+}
