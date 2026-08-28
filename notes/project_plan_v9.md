@@ -230,9 +230,9 @@ P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢
 
 **P6.3 — live demo（~1 单元）DONE**（本次）。`src/demo/live.py`：stdlib + ANSI 终端 dashboard，零新依赖，基于 `SpecServer`。每轮重绘每序列流式文本 + round/mode/γ/accept-len/滚动α/realign-tax/agg tok-s/并发/队列/熔断器原因。三开关 `--no-spec`（每轮 degraded 纯 target 解码）/ `--gammatune`（`ServeConfig.gammatune_on`，每轮 batch-mean 接受长度跑 `gammatune_update`，demo 级非 per-stream）/ `--no-breaker`；`--compare` 打印 vs spec-off 的 speedup；`--fake` 用 FakeModel 零下载。`serving_loop.py` 加 `spec_enabled`/`gammatune_on`/`gamma_min`/`gamma_max` + `RoundInfo.round_gamma`。真实 smoke（3 prompt×32 tok）：spec+breaker 22.6 tok/s / 16 轮 vs spec-off 24.5 tok/s / 51 轮 = 0.92×（与 P6.0/P6.1 一致：这对模型在这台机器投机打平/微亏，但"轮数少 3×、墙钟持平"看得见）。`tests/test_demo.py` 5 个。asciinema/GIF 是用户手动步骤。
 
-**P6.4 — 打包 + 工程故事（~1 单元）** README 重定位；6 篇工程故事（坑16 确认偏误 / 把 KV cache 做对 / 批量正确性税 / 熔断器真信号 + 前提过时 / fake-quant vs 真 int4 / 测一个投机解码器：输出等价检查漏掉了什么）；坑表（17→~20）当一等公民。
+**P6.4 — 打包 + 工程故事（~1 单元）DONE**（本次）。`README.md` 全量重写（"规划阶段尚未开始" → 真实系统清单 + 195 tests + 诚实 headline：KV cache 2.7× 是大杠杆 / spec-decode 在这对模型这台机器打平 0.93–1.0× / 批量吞吐 flat / 真 int4 AWQ 3.7× 小 + 3.3× 快 + ppl+1.60 / adaptive-γ 无收益 / 输出等价是栈里最弱的测试）。6 篇工程故事 `docs/engineering-notes/0N-*.md`：01 确认偏误（坑16）/ 02 把 KV cache 做对（坑18，回滚锚点=喂过前向的 token 数，不是本轮碰过的）/ 03 批量正确性税（每序列 cache 等价由构造成立，realignment tax 中等并发最痛 p90 0.68–0.74@w4、w8 塌回 0.02）/ 04 熔断器真信号（坑15/20，batch-blind 指标 + 真 rolling α 重建，16 跑只 trip 1 次且从不因 batch size）/ 05 fake-quant vs 真 int4（runtime 决定你能测什么；坑21 gptq 退化当一等 finding；跨 harness Δ 不可相减）/ 06 测投机解码器（O1/O3/O4/O5/O2 lattice；真实模型输出 oracle **不是** FakeModel 超集——FakeModel 位置一热过度放大位置敏感度，所以 O1 杀 M-POS 而 O2 漏；batch 不变性在参考路径 bitwise，5.8e-3 是量化 Metal artefact）。坑表独立成 `docs/pitfalls.md`（坑1–21，动手撞上的 13–21 在前，literature 派生的 1–12 压缩成表）。pytest 195 不变（纯文档）。
 
-依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插（已 DONE）。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。**
+依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。** 进度：P6.0/P6.1/P6.2/P6.3/P6.4 DONE；P6.5 Parts 1–5 + O2 DONE，剩 Part 6 工程故事（与 P6.4 故事 06 重叠，实质已覆盖）+ 2510.22876 BSP 签名复现（架构上不可表达，转真实模型演示，未做）。
 
 ---
 

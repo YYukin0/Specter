@@ -1,0 +1,209 @@
+# Pitfalls (坑表)
+
+A running log of the traps this project hit or deliberately steered around. The
+numbered list mirrors `notes/project_plan_v9.md` §9.2 — this file is the
+English, standalone version, ordered so the ones found *while building* come
+first because those are the ones worth reading.
+
+Each entry: what it was, why it was easy to get wrong, what was done about it.
+
+---
+
+## Found while building (坑13–21, all 2026-08-28)
+
+### 坑18 — the partial-acceptance rollback formula in the plan was wrong
+**Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
+
+The plan said: on a partial acceptance, crop the target KV cache to
+`prefix + k + 1` and the draft cache to `prefix + k` (different lengths, the
+extra slot on the target side "for the bonus / resampled token").
+
+That is wrong. In one round the target forward is fed
+`[pending_target_token] + [γ draft tokens]` and produces `γ+1` rows of logits.
+The token at position `k` — whether it's an accepted draft token, the
+resampled token on a rejection, or the bonus token on a full acceptance — is
+the **output** of that forward. It was never an **input** to any forward, so
+its KV does not exist. The correct move is: **crop both caches to
+`prefix + n_accepted`** (`prefix + γ` on a full acceptance).
+
+**Why it's easy to get wrong:** on a *full-acceptance* round `prefix + k + 1`
+happens to equal the current sequence length, so a crop helper that early-returns
+when `target_len >= current` silently does nothing and the behaviour looks
+correct. Only a round with an actual rejection exposes it.
+
+**Fix:** implement `prefix + n_accepted`; add a `_crop_to(cache, target_len)`
+wrapper that only accepts `target_len <= current` and pins the `DynamicCache.crop`
+negative-offset semantics; add an always-on test invariant
+`cache.get_seq_length() == len(committed) - 1` after every round; add a
+rejection-heavy stress phase (`phase=2.4`) so non-full-acceptance rounds are
+actually exercised. Cross-checked against HuggingFace
+`generation/utils.py::_speculative_sampling` (`crop(-(candidate_length - n_matches))`),
+which is the same `prefix + n_matches`.
+
+**Lesson:** the anchor for a rollback length is "how many tokens were fed
+through a forward", not "how many tokens this round touched".
+
+---
+
+### 坑19 — the batch correctness/throughput trade-off is real; measure the tax you don't pay
+**Where:** P6.1, output-equivalent batched speculative decoding (`src/spec_kv_batch.py`).
+
+Every naive way to batch speculative decoding (masking, rollback, dynamic
+padding) breaks output equivalence: different sequences accept different numbers
+of draft tokens per round, so position ids / attention masks / KV-cache lengths
+drift apart across rounds (EQSPEC, arXiv:2510.22876).
+
+The choice here was **not to fix the masking path but to sidestep it**:每
+sequence gets its own KV cache, and a "batch round" runs the already-verified
+single-sequence step once per sequence. No shared ragged tensor → nothing drifts
+→ output equivalence holds **by construction** (a test pins
+`batched == N × single-sequence`, bit-exact, greedy and sampling).
+
+**Cost:** no kernel-level ragged-verify batching, so throughput is nearly flat
+in concurrency (`speedup_vs_width1` 0.94–1.03). *That flatness is the finding.*
+
+**Measure the tax that wasn't paid:** the realignment overhead an EQSPEC-style
+padded-batch path *would* pay is computed analytically against the rectangular
+counterfactual: `1 - Σ work / (n · max work)`. Mean rises to 0.073 (short) /
+0.096 (long) at width 4, p90 0.68–0.74; it drops back to 0.007–0.02 at width 8
+(work is more uniform when every sequence runs every round). The tax peaks at
+*medium* width.
+
+**Lesson:** an implementation that can prove output equivalence gives up the
+batch speedup; one that gets the speedup pays a realignment tax. Report the tax
+as a first-class measurement, don't pretend batch speedup is free.
+
+---
+
+### 坑20 — a circuit breaker on a synthetic signal can't be evaluated honestly
+**Where:** P5.3 → P6.1, the batch-aware circuit breaker.
+
+P5.3's cost model was `total_emitted / total_cost_units` with a speculative round
+costing `c + γ` and a degraded step costing `c`. **No term in that formula
+depends on batch size.** So "always speculate" is a structural upper bound the
+breaker can't beat: degrading to plain target decoding does strictly less useful
+work per unit compute, and there's no "draft forward gets expensive under a
+saturated accelerator at high batch" term to compensate. Measured: always-spec
+0.280 ± 0.010 vs breaker 0.247 ± 0.008 — the primary metric says "breaker is
+useless", because the batch signal was synthetic and never fed back into the
+acceptance rate α.
+
+**Fix in P6.1:** the breaker trips on a **real** rolling α (windowed mean of the
+last `alpha_window` acceptance decisions across all sequences) `< alpha_floor`,
+optionally also on a target-only latency probe showing speculative rounds are
+wall-clock slower. `len(active)` is an *input*, never the rule. While degraded,
+force a speculative probe every `reprobe_every` rounds so α stays observable
+(坑11). Over 16 runs the breaker tripped exactly once (`long / width 2 /
+breaker on`) and **never** because of batch size (width 8 never degrades).
+
+**Lesson:** a circuit breaker only earns its keep on a workload where α actually
+drops. Under a healthy α it should be a near-no-op — "never degrades" is not a
+bug. Honest validation needs a pair / distribution that genuinely drives α down.
+
+---
+
+### 坑21 — `mlx_lm.gptq` produced a degenerate model; sentinel-check every third-party artifact
+**Where:** P6.2, real int4 via mlx-lm.
+
+`mlx_lm.gptq` (mlx-lm 0.31.3), Qwen2.5-1.5B-Instruct, bits=4 group-size=128:
+the output model emits a constant `!` and its wikitext-2 forward NLL is `nan`.
+First guess was calibration starvation (the first run gave GPTQ only 2 Hessian
+batches from `--num-samples 16`), so it was re-run at `--num-samples 64
+--sequence-length 512` — **still degenerate**. `mlx_lm.awq` and
+`mlx_lm.convert -q` RTN on the identical model/config are both fine.
+
+Not bisected further (group size? a bad fallback layer? an mlx-lm bug for the
+Qwen2 architecture?) — compute budget, and AWQ was already the primary real-int4
+arm.
+
+**Fix:** the verify script sanitizes a non-finite perplexity to `null` +
+`degenerate_forward: true`, flags the arm, records `None` for its delta, prints
+`GPTQ DEGENERATE` in the headline, and keeps the JSON strict (no `NaN` token).
+The result file's `quant_config.gptq` documents the full repro.
+
+**Lesson:** when you borrow a third-party quantizer as a comparison arm, the
+output model must pass a sentinel — "generate one sentence, is it words?" plus
+"one forward, is the NLL finite?" — before you trust it. Don't just check that
+the tool finished and the weights file exists. And keep the degenerate arm in
+the results: "this tool doesn't work on this architecture" is useful information.
+
+---
+
+### 坑16 — a flat curve that matched the hypothesis, because the knob was stuck
+**Where:** P2.3, AWQ calibration-set-size ablation.
+
+The self-built AWQ path captures all 196 target Linear layers' input activations
+in a single forward, so it needs a `max_tokens_per_layer` cap to avoid OOM. That
+cap was hard-wired to 512, and each calibration sequence was also truncated to
+512 tokens. So the *first* 512-token wikitext row filled every layer's pool and
+capture stopped immediately. Result: `n_calib ∈ {8, 16, 32, 64, 128}` all fed
+the **byte-identical** "first 512 tokens" pool — quantization output and
+perplexity were bit-identical across the whole sweep (seed 0: 13.6015 for
+n_calib = 4/8/16/32/64).
+
+**Why it was nearly missed:** the flat curve *matched the AWQ paper's claim*
+that a small calibration set suffices. Textbook confirmation bias — the review
+question should have been "did the `n_calib` knob actually move?", not "is the
+curve flat?".
+
+**Fix:** expose `max_tokens_per_layer` / `max_seq_len` (default still 512, so
+P2.2 is byte-for-byte unchanged); in P2.3 truncate rows to 64 tokens and set the
+cap to `n_calib × 64` so the pool grows linearly; record
+`captured_tokens_per_layer` per point plus a `capture_knob_actually_moved`
+boolean that auto-annotates the verdict string when `max/min ≤ 1.5×`; drop
+`n_calib = 128` (would OOM a 24 GB machine).
+
+---
+
+### 坑17 — the "cached" code corpus was only a README
+**Where:** P2.2, cross-distribution AWQ.
+
+Notes said `codeparrot/codeparrot-clean-valid` and `allenai/c4` were cached
+locally; in fact only their README snapshots were, with no data shards, so
+`HF_HUB_OFFLINE=1` couldn't load them. The "code" distribution fell back to
+`google-research-datasets/mbpp`'s `code` field (~176 k chars).
+
+**Why it distorts:** mbpp solutions are 3–8 line, highly templated functions —
+far narrower than real code. As a calibration set they *inflate* the
+cross-distribution gap (measured +0.56 ppl for calib=code→eval=NL vs
+calib=NL→eval=NL, which looks like "AWQ is unstable across distributions" but is
+partly the narrow corpus); as an eval set they give an unrealistically low ppl
+(fp16 baseline 3.1).
+
+**Fix:** the result file's `code_corpus_note` states the mbpp substitution, the
+fp16 baseline number, and that the gap includes a narrow-corpus contribution;
+GPTQ arm and real code corpora deferred to a later stage.
+
+---
+
+### 坑13 / 坑14 / 坑15 — the earlier implementation-hit traps
+
+- **坑13 (M2, P1.2):** greedy speculative decoding is only token-exact with
+  greedy target-only if the tie-breaking and the "compare argmax, not sampled
+  token" convention match exactly on both paths; a mismatch shows up as a slow
+  drift, not a crash.
+- **坑14 (M4, P5.0/P5.1):** the GammaTune null result — the main model pair sits
+  at α ≈ 0.79 with too little variance for an adaptive-γ controller to help;
+  confirmed on 3 model pairs (see 坑9 补记), so the null is robust, not an
+  artifact of one pair.
+- **坑15 (M4, P5.3):** see 坑20 — the synthetic batch signal made "always
+  speculate" an unbeatable upper bound for the breaker's cost metric.
+
+---
+
+## Anticipated from prior art (坑1–12)
+
+These came out of the literature review *before* implementation and shaped the
+design; most were designed around rather than hit.
+
+| # | Trap | Guard |
+|---|------|-------|
+| 坑1 | Tokenizer / vocab mismatch silently zeros the acceptance rate (even within a family: Qwen2 1.5B vocab 151936 vs 72B 152064). | P1.0 asserts vocab identity. |
+| 坑2 | Bonus-token sampled from the *draft* distribution (a real DSD bug) — violates correctness, doesn't crash. | Unit test pins which model's logits the bonus token comes from. |
+| 坑3 | `batch > 1` ragged-tensor desync — sequences accept different token counts, so position ids / masks / cache lengths go ragged. | 支柱4 maintains per-sequence state by hand; see 坑19. |
+| 坑4 | Draft/target "dead zone" — a size gap under ~2–3× can be slower than no speculation. AdaEDL reports static SPD 16% *slower* than autoregressive for one bad pair, +43% *faster* once adaptive early-stop is added. | Diagnostic: α is fine but wall-clock regresses → check the draft's own latency share first. |
+| 坑5 | Calibration-distribution mismatch overfits GPTQ badly, AWQ less so (cross-distribution: AWQ +0.5–0.6, GPTQ +2.3–4.9). | P2.2 reproduces the matrix. |
+| 坑9 | GammaTune degrades under adversarial / highly non-stationary workloads and helps little when draft/target already agree. | P5.1 non-stationary test; 坑9 补记 confirms the low-variance regime can't be escaped within the Qwen2.5-Instruct family. |
+| 坑10 | Optimal γ shifts with target quantization (SpecKV: FP16 γ=2 → INT8 γ=8 under BitsAndBytes, a 4× shift) — quantization and adaptive control are not independent. AWQ's per-channel scaling may shift it *less*; that would be a finding, not an error. | P5.2 reuses the 支柱2 quant models + a BnB NF4 same-source control arm. |
+| 坑11 | DSD-style breakers "stop collecting data when disabled" and can't re-enable; BanditSpec ignores KV-cache rebuild cost. | P5.3/P6.1 breaker has periodic re-probing + measured switch cost (Nightjar's 17.87–102 ms is the sanity band). |
+| 坑12 | BanditSpec's K-armed frame doesn't treat batch size as context and its regret bound ignores switch cost. | Cited for comparison only; not reimplemented. |
