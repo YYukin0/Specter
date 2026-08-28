@@ -1,0 +1,35 @@
+{
+  "n": 60,
+  "accuracy": 0.9333333333333333,
+  "mechanism_precision_when_manifested": 1.0,
+  "n_manifested": 56,
+  "confusion_expected_x_predicted": {
+    "UPSTREAM_KV_POS": {
+      "UPSTREAM_KV_POS": 28
+    },
+    "SAMPLING_MATH": {
+      "SAMPLING_MATH": 25,
+      "NO_DIVERGENCE": 4
+    },
+    "CONTROL_DESYNC": {
+      "CONTROL_DESYNC": 3
+    }
+  },
+  "per_operator_hit_rate": {
+    "accept_always": 1.0,
+    "accept_ratio_inverted": 1.0,
+    "accept_strict": 1.0,
+    "adjusted_abs_not_relu": 1.0,
+    "bonus_token_from_draft": 1.0,
+    "eos_ignored_midblock": 1.0,
+    "force_accept_first": 1.0,
+    "kv_crop_off_by_one_minus": 1.0,
+    "kv_crop_off_by_one_plus": 1.0,
+    "kv_no_crop": 1.0,
+    "leniency_injected": 0.2,
+    "pos_id_frozen": 1.0,
+    "pos_id_off_by_one_minus": 1.0,
+    "pos_id_off_by_one_plus": 1.0,
+    "resample_from_target": 1.0
+  }
+}
