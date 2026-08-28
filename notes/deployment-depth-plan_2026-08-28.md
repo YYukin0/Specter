@@ -213,6 +213,40 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 
 ---
 
+### v3（2026-08-28 深挖轮）—— 又搜了一轮找"漏网的 novel 角度"，结论：没有干净的"推翻某篇"的角度，2026 上半年这块封得很死
+
+再搜的方向 + 已被占的格子（别再造轮子）：
+
+| 想过的角度 | 已经有人做了 | 出处 |
+|---|---|---|
+| 从零实现 + 3 级分布等价验证 + Apple Silicon + **单独隔离"量化 Metal 后端把并行 verify 串行执行"** + 建议报告 draft/target 延迟比和 verify-batch scaling 曲线 | **几乎就是 P6.0 + P6.2 动机的原文**，2026-07 发表，同一类硬件、同样"from scratch"框架 | *Lossless but Not Free: An Empirical Anatomy of Speculative Decoding on Consumer Hardware*, arXiv:2607.17283 |
+| 批量投机解码输出等价 / ragged tensor / EQSPEC / 40% realignment tax | 见 C3 | arXiv:2510.22876 |
+| 压缩档 × 最优 γ 耦合 | 见 C1 | SpecKV arXiv:2605.02888 |
+| 量化 drafter（AWQ/GPTQ/RTN）几乎不动接受长度 | 竞赛 writeup 直接对比过 RTN/AWQ/GPTQ 量化 drafter，结论"INT4 对 drafter 平均接受长度只有极小影响，三种 PTQ 相当" | arXiv:2607.04244 |
+| 结构化 / tool-call 输出接受率近 100%、双峰、按 slot-local EMA 调 γ | ToolSpec（schema-aware）、SimpleTool（>93% 接受率）、AgentSpec（且明确发现"基于接受率的预算分配对 agent 批量推理无效"）、Stateful Inference（prompt-lookup + acceptance gating）全是 2026 | arXiv:2604.13519 / 2603.00030 / 2608.24004 / 2605.26289 |
+| 各任务加速不均 + 只微调 drafter 做公平性 | Disparate Impacts：under-fit / 低资源任务系统性拿更少加速；按 divergence 加权只更新 drafter | arXiv:2510.02128 |
+| 自适应 γ（EMA） | GammaTune / GammaTune+，见 C5 | arXiv:2504.00030 |
+| MLX 上连续批处理 + 投机解码 | vLLM-mlx（EuroMLSys '26，M4 Max 525 tok/s）、mlxcel（Rust，continuous batching + spec + KV 压缩）、dflash-mlx（MLX 上从零 exact spec decode） | 多个开源 / EuroMLSys '26 |
+| "光看接受率不能预测加速，要报 cost ratio" | 多篇，且 2607.17283 把它当头条建议 | — |
+
+**活下来的缝（都不是"推翻"，是"没人系统做过"）**，按推荐度排：
+
+- **缝 B（推荐当命名交付物）——投机解码实现的一致性/一致性测试套件（conformance + fault-injection test harness）。**
+  `Batch Spec Decoding Done Right` 是靠对着真实 repo 做差分测试抓 bug，但**没放出可复用的套件**；没人发表过"这是一套 property / pytest 插件，拿去测你自己的 spec-decode 实现"。Specter 已经有的东西正好是这个：`injection=` 故障注入钩子 + FakeModel 确定性 parity oracle + KV 回滚压力测试 + ragged-EOS 用例 + argmax-tie / fp 非确定性容差带。**这条零"被抢"风险、正好是项目最强的地方、且不需要打赢任何人的数字**——对推理/基础设施岗是对味的 craft 交付物。做法：把 P6.0/P6.1 的测试基建提升成一个独立命名模块（`tests/spec_conformance/` + 一页 README「拿去测你的实现」），故障注入清单覆盖：position-id 错位、KV 裁剪差 1、mask 泄漏、residual 分布采样错、EOS 早停不同步。
+
+- **缝 A（并进 P6.1 当头条测量）——unified memory 上、verify batch 维（部分）串行执行时的批量投机解码正确性税。**
+  2607.17283 明确只做 BS=1，且写了"server-side batching 完全改变经济性——不在本文范围"。2510.22876 是服务器 GPU（CUDA、transformers 4.51.3）。**没人把两者合起来**：如果 Metal 把 verify 的 batch 维串行跑，那 EQSPEC 那 ~40% realignment 开销是叠加在一个几乎拿不到 batch 并行的 verify step 上——可推出"在某个上下文长度以下，Apple Silicon 上批量投机解码净负"这个具体、可证伪的假设。P6.1 正是量它的仪器。风险：可能只是复现"Mac 上别batch投机解码"，是个温和的负结果；vLLM-mlx 团队可能已有内部数据。
+
+- **缝 C（本地免费侧验，别当头条）——标定数据分布 → draft 接受率的耦合。**
+  搜索明确说这"是个 open gap"：大家都用一个 calib set 量化 drafter、报告接受率几乎不动；没人变过 calib 分布（C4 vs WikiText vs 领域/对话 vs 评测分布本身）再测传导到各领域接受率的漂移。Specter 的 P2.2 跨分布 AWQ 模型已经建好了。风险：效应量可能极小（竞赛结果说 INT4 drafter 接受率本来就几乎不动），大概率又落地成"确认很小"的 null。
+
+- **缝 D（有意思但贴着已占区）——把自适应 γ 的评价重新框成消费级（对齐差的）pair 上的尾延迟 / SLO 问题。**
+  P1.4 已测到接受长度 std 随 γ 涨 0.42→4.12，比 AdaEDL 调优 pair（→2.35）陡。GammaTune/AdaEDL 优化的是平均吞吐；Disparate Impacts 说平均掩盖了 per-task 分散。没人针对"主导本地/消费场景的对齐差 pair"围绕 p99 / inter-token latency 方差来评自适应 γ。风险：和 GammaTune+（logit 早停本身就是方差压缩器）+ Disparate Impacts 重叠，定位要小心。
+
+**决定**：方向 B 主线不变。把 **缝 B 显式抬成命名交付物**（`tests/spec_conformance/`，见 P6.0/P6.1 与 P6.4 写作提纲），**缝 A 并进 P6.1 当头条测量**（unified-memory 批量正确性税），**缝 C/D 列为可选本地侧验、不作 headline 主张**。没有"推翻论文"的路，项目定位继续是 portfolio / 工程 craft（见 [[project_specter_direction_b_deployment]]）。
+
+---
+
 ## 8. 参考文献
 
 - Leviathan et al. 2023, *Fast Inference from Transformers via Speculative Decoding* — 基础算法（已在 `rejection_sampling.py` 引用）。
@@ -225,3 +259,7 @@ Together AI（长上下文 + 大 batch 仍 memory-bound，投机给 2×、batch 
 - *The Synergy of Speculative Decoding and Batching*, arXiv:2310.18813 — batch × 投机解码早期分析。
 - mlx-lm `LEARNED_QUANTS.md` — 本地 AWQ/GPTQ/DWQ/dynamic（C2）。
 - AWQ, arXiv:2306.00978 / GPTQ, arXiv:2210.17323 — 量化基线。
+- *Lossless but Not Free: An Empirical Anatomy of Speculative Decoding on Consumer Hardware*, arXiv:2607.17283 — 从零实现 + Apple Silicon + 隔离"量化 Metal 串行 verify"（v3 缝 A / B）。
+- *The Disparate Impacts of Speculative Decoding*, arXiv:2510.02128 — per-task 加速不均、drafter-only 公平性微调（v3 缝 D）。
+- ToolSpec arXiv:2604.13519 / SimpleTool arXiv:2603.00030 / AgentSpec arXiv:2608.24004 — 结构化 / tool-call 高接受率、slot-local EMA gating（v3）。
+- *Speculative Decoding and Beyond: An In-Depth Survey*, arXiv:2502.19732 — 最新综述（v3 深挖起点）。
