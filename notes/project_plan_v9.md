@@ -217,14 +217,21 @@ Algorithm 1：接受数 A 与当前 γ 相等时扩窗（$\gamma \leftarrow A + 
 - **熔断器**：16 个 run 里只 `long / w=2 / br=on` 触发一次（degrade 20 轮 + 1 次强制探针后恢复 —— 正是坑11 的"不重探测就永不恢复"机制在动），从不因 batch size 触发（w=8 从不 degrade）——坑15 的点验到了。
 撞上 §7 C3（ragged tensor 正确性）→ **§9.2 坑19**；撞上 §7 C4（熔断器"大 batch → 没用"前提）→ **§9.2 坑20**。P6.5 扩到 batch 见 §7 C6 尾。
 
-**P6.2 — 真实 int4（走 mlx-lm，~1 单元）**
-`src/awq_to_mlx.py` + `src/verify_p6_2_real_int4.py`。四方本地对比：自研 from-scratch AWQ vs `mlx_lm.awq` / `mlx_lm.gptq` / `mlx_lm.dwq`（都 4-bit，都本地 Metal）。验证 P2.1 fake-quant ppl 是否诚实。注意 P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢先，降级为本地顺手确认。
+**P6.2 — 真实 int4（走 mlx-lm，~1 单元）DONE**（2026-08-28）
+`src/verify_p6_2_real_int4.py`（子进程分臂 bench，克隆 `p2_4_mlx_awq_crosscheck.py` 模式）+ `results/p6_2_awq_int4_real.json`。目标 Qwen2.5-1.5B-Instruct，四方本地对比全 4-bit / g128：
+- **fp16_mlx**（mlx-lm 加载 bf16 权重）：wikitext2 ppl **11.54**，decode **31 tok/s**，权重 **3.09 GB**
+- **mlx_lm.awq**（`--num-samples 16 --seq 256 --n-grid 10`）：ppl **13.14（Δ+1.60）**，decode **104 tok/s（3.3×）**，权重 **0.84 GB（3.7× 更小）**，RSS 1.65 GB
+- **mlx_lm.gptq**：**退化** —— bits=4 g=128 产出常数 `!` 输出 / wikitext2 nll = nan，`--num-samples` 16(seq256) 与 64(seq512) 两次都复现，所以不是标定数据不足；同 model/config 下 AWQ + RTN 都正常。未继续二分（group size？坏 fallback 层？mlx-lm 该架构 bug？—— 算力预算）。**结论：Apple silicon 上 `mlx_lm.awq` 可用，`mlx_lm.gptq`（0.31.3）对这个架构不可用。**
+- **mlx_rtn_int4_g128**（`mlx_lm.convert -q`，仿射 RTN，无标定）：ppl **13.81（Δ+2.26）** —— 即 **AWQ 标定比朴素 RTN 多买 +0.66 ppl**，非 null 结果，标定确实有用。
+未做**自研 AWQ scales → 真 int4 打包**臂：`mlx_lm.awq` 无自定义 scale 注入 API，P2.x 手写 AWQ 是 torch fake-quant 路径无 int4 打包；RTN 臂替代"无标定"参照。
+ppl 口径：wikitext-2-raw-v1 test，非重叠 512-tok 块前 32 个（`awq_perplexity.load_eval_corpus`），mlx tokenizer，所有臂共享同一 token 数组 → Δ 内部自洽，但**不可**与 P2.x 的 torch 滑窗口径对比。交叉参照：P2.2 torch fake-quant Δ ≈ **+1.2**，真 MLX int4 AWQ Δ **+1.60** —— 同量级，**真打包比 fake-quant 差约 0.4 ppl，即 fake-quant 曾略乐观**（诚实性验证的答案）。
+P5.2 的"AWQ vs BnB 改变最优 γ"已基本被 SpecKV（arXiv:2605.02888）抢先；本地 spec-decode 联动未跑（投机栈是 torch/MPS，MLX int4 模型进不去，且无 torch/MPS int4 运行时，§9.1 Risk B）。`tests/test_verify_p6_2_real_int4.py` 3 个（纯 helper + 有模型时跑 smoke）。撞上 mlx_lm.gptq 退化 → **§9.2 坑21**。
 
 **P6.3 — live demo（~1 单元）DONE**（本次）。`src/demo/live.py`：stdlib + ANSI 终端 dashboard，零新依赖，基于 `SpecServer`。每轮重绘每序列流式文本 + round/mode/γ/accept-len/滚动α/realign-tax/agg tok-s/并发/队列/熔断器原因。三开关 `--no-spec`（每轮 degraded 纯 target 解码）/ `--gammatune`（`ServeConfig.gammatune_on`，每轮 batch-mean 接受长度跑 `gammatune_update`，demo 级非 per-stream）/ `--no-breaker`；`--compare` 打印 vs spec-off 的 speedup；`--fake` 用 FakeModel 零下载。`serving_loop.py` 加 `spec_enabled`/`gammatune_on`/`gamma_min`/`gamma_max` + `RoundInfo.round_gamma`。真实 smoke（3 prompt×32 tok）：spec+breaker 22.6 tok/s / 16 轮 vs spec-off 24.5 tok/s / 51 轮 = 0.92×（与 P6.0/P6.1 一致：这对模型在这台机器投机打平/微亏，但"轮数少 3×、墙钟持平"看得见）。`tests/test_demo.py` 5 个。asciinema/GIF 是用户手动步骤。
 
 **P6.4 — 打包 + 工程故事（~1 单元）** README 重定位；6 篇工程故事（坑16 确认偏误 / 把 KV cache 做对 / 批量正确性税 / 熔断器真信号 + 前提过时 / fake-quant vs 真 int4 / 测一个投机解码器：输出等价检查漏掉了什么）；坑表（17→~20）当一等公民。
 
-依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。**
+依赖：P6.0 与 P6.5 并行起步 → P6.1 → P6.3 → P6.4；P6.2 任何时候可插（已 DONE）。合计 ~9.5 单元、全本地、$0。**优先级高于 §11 路线图里 M6-M8 的云端条目。**
 
 ---
 
@@ -275,6 +282,8 @@ Algorithm 1：接受数 A 与当前 γ 相等时扩窗（$\gamma \leftarrow A + 
 **坑19（2026-08-28，§7 C3 在 P6.1 动手时撞上 → 转坑）**：§7 C3 说每条 naive 批量投机路线（Masking / Rollback / Dynamic Padding）都会破坏输出等价——一批里每序列接受的 draft 数不同 → position id / attention mask / KV-cache 长度跨轮次累积漂移（EQSPEC / arXiv:2510.22876）。P6.1 动手时的选择：**不修 `spec_batch.py` 的 masking 路线，而是绕开整个问题** —— 每序列独立 KV cache（`src/spec_kv_batch.py`），一"批量轮"对每序列各跑一次已验过的单序列 `speculative_step_kv`，没有共享 ragged tensor 就没有东西会漂，输出等价**由构造成立**（`tests/test_spec_kv_batch.py` 钉死 batched == N×单序列，greedy+采样 bit-exact；`assert_rectangular_invariant` 每轮断言）。**代价**：放弃 kernel 级 ragged verify 批处理 → 吞吐随并发几乎平（`results/p6_1_serving_throughput.json`：`speedup_vs_width1` 0.94–1.03）。**把没付的税测出来**：`ragged_realignment_overhead(work) = 1 - Σwork/(n·max(work))` 对"矩形 padded batch 反事实"解析算——mean 随 width 1→4 涨到 0.073–0.096、p90 0.68–0.74（即 EQSPEC 那条路要付的 padding 浪费），w=8 反降（work 更均匀）。**教训**：批量投机的"正确性 vs 吞吐"是真实取舍；能证明输出等价的实现拿不到 batch 加速，能拿加速的实现要付 realignment tax。报告里把 tax 当一等测量量，而不是假装 batch 加速免费。已在 `src/spec_kv_batch.py` docstring + 结果文件 caveats 写明。
 
 **坑20（2026-08-28，§7 C4 在 P6.1 动手时撞上 → 转坑）**：§7 C4 说 P5.3 熔断器的 batch 信号是合成注入的（坑15），且"大 batch 让投机变差"这个前提已被 2025 长上下文工作部分推翻，要求 P6.1 的熔断器接**真信号**。P6.1 落实：熔断器 trip 判据 = 滚动 α（跨所有序列、最近 `alpha_window` 个接受判定的窗口均值）< `alpha_floor`，OR 可选的 target-only 延迟探针显示投机轮墙钟反而更慢；`len(active)` 只作为输入、**从不作为规则**。degraded 时每 `reprobe_every` 轮强制一次 spec 探针让 α 恢复可见（坑11）。`results/p6_1_serving_throughput.json`（16 个 run）：**熔断器只在 `long / w=2 / br=on` 触发一次**（degrade 20 轮 → 强制探针 → 恢复，正是坑11 机制），**w=8 满批从不 degrade** —— 证明判据真的不看 batch size。**与坑15 的对比**：坑15 里 always-spec 是熔断器结构上无法跑赢的上界（合成信号不反馈进 α）；P6.1 里 α 是真实测出来的，熔断器不再是纯负担，但在这对 0.5B/1.5B + 这台 Mac 上 α≈0.77 稳定高于 floor，所以大多数轮它就是个 no-op。**教训**：熔断器的价值只有在 α 真的会掉的工作负载上才显现；健康 α 下它应该基本不动，"从不 degrade"不是 bug。真实验证要故意找会掉 α 的 pair / 分布（留 P6.2 int4 target 或跨分布 prompt）。
+
+**坑21（2026-08-28，P6.2 动手时撞上）**：P6.2 计划四方对比里包含 `mlx_lm.gptq`（mlx-lm 0.31.3）。实测 `mlx_lm.gptq -m Qwen2.5-1.5B-Instruct --bits 4 --group-size 128` 产出的模型**退化**：`generate` 出常数 `!`，wikitext2 前向 nll = nan。第一反应是标定不足（首跑 `--num-samples 16 --sequence-length 256` 只喂了 2 个 Hessian batch），于是加到 `--num-samples 64 --sequence-length 512` 重跑 —— **仍然退化**，同样常数 `!`。同一模型、同一 bits/group-size 下 `mlx_lm.awq`（ppl 13.14）和 `mlx_lm.convert -q` RTN（ppl 13.81）都正常。没继续二分（可能是 group-size、某个 fallback 层、或 mlx-lm 对 Qwen2 架构的 GPTQ 实现 bug）—— 算力预算，且 AWQ 已是主 real-int4 臂。**应对**：`verify_p6_2_real_int4.py` 的 `_eval_ppl` 把非有限 ppl 落成 `null` + `degenerate_forward` 标志，`run()` 里 `_sane()` 判退化臂、`deltas_vs_fp16_mlx` 该臂记 `None`、headline 印 `GPTQ DEGENERATE`，JSON 保持严格（无 NaN token）。结果文件 `quant_config.gptq` 完整写明复现步骤。**教训**：(a) 借第三方量化工具当对比臂时，产出模型必须过一个"生成一句话看是不是人话 + 一次前向看 nll 有限"的哨兵检查，不能只看它有没有跑完 / 权重文件在不在；(b) 退化臂不要从结果里删掉——"这个工具在这个架构上不能用"本身就是给读者的有用信息，如实记为 finding。**工程故事**：P6.4 的"fake-quant vs 真 int4"那篇顺带收这条（Apple silicon 上 AWQ 能用、GPTQ 这版不能用）。
 
 ### 9.3 支柱2已知坑
 

@@ -1,0 +1,181 @@
+{
+  "task": "P6.2 -- real int4 via mlx-lm (4-way local comparison)",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "quant_config": {
+    "bits": 4,
+    "group_size": 128,
+    "awq": "mlx_lm.awq --num-samples 16 --sequence-length 256 --n-grid 10",
+    "gptq": "mlx_lm.gptq (mlx-lm 0.31.3) bits=4 g=128 -- DEGENERATE: constant '!' output / nan wikitext2 nll, reproduced at --num-samples 16 (seq 256) AND --num-samples 64 (seq 512), so not calibration starvation. AWQ + RTN on the same model/config are both fine. Not bisected further (group size? bad fallback layer? mlx-lm bug for this arch) -- compute budget. Finding: on Apple silicon mlx_lm.awq is usable here, mlx_lm.gptq is not.",
+    "rtn": "mlx_lm.convert -q (affine round-to-nearest, no calibration)"
+  },
+  "ppl_harness": {
+    "corpus": "wikitext-2-raw-v1 test (awq_perplexity.load_eval_corpus)",
+    "recipe": "non-overlapping 512-tok blocks, first 32 in corpus order, mlx tokenizer, next-token CE over whole block, exp(mean)",
+    "note": "shared token array across all arms -> deltas internally consistent; NOT comparable to the P2.x torch sliding-window harness (see cross_reference)"
+  },
+  "arms": {
+    "fp16_mlx": {
+      "label": "fp16_mlx",
+      "model_path": "/Users/yyukin0/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "wikitext2_ppl": {
+        "perplexity": 11.544407101405817,
+        "mean_nll": 2.4462010860443115,
+        "ppl_std_error": 0.25719279350775714,
+        "n_tokens": 16352,
+        "degenerate_forward": false
+      },
+      "decode_tok_s": {
+        "mean": 31.36550572032432,
+        "std": 0.32041744255745613,
+        "n": 9
+      },
+      "prompt_tok_s": {
+        "mean": 147.43889275908236,
+        "std": 9.700944894716839,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 3.1030520288888885,
+        "std": 0.0011771498685160552,
+        "n": 9
+      },
+      "process_rss_gb": 3.889332224,
+      "ppl_seq_len": 512,
+      "ppl_num_samples": 32,
+      "degenerate": false
+    },
+    "mlx_awq_int4_g128": {
+      "label": "mlx_awq_int4_g128",
+      "model_path": "/Users/yyukin0/Documents/Specter/src/results/p6_2_awq_1.5b",
+      "wikitext2_ppl": {
+        "perplexity": 13.142361450946614,
+        "mean_nll": 2.575840711593628,
+        "ppl_std_error": 0.29725993108250837,
+        "n_tokens": 16352,
+        "degenerate_forward": false
+      },
+      "decode_tok_s": {
+        "mean": 104.43457930777869,
+        "std": 1.2076935072567254,
+        "n": 9
+      },
+      "prompt_tok_s": {
+        "mean": 261.93398013986393,
+        "std": 10.9200027577771,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 0.868680668888889,
+        "std": 0.002172022546695843,
+        "n": 9
+      },
+      "process_rss_gb": 1.652588544,
+      "ppl_seq_len": 512,
+      "ppl_num_samples": 32,
+      "degenerate": false
+    },
+    "mlx_gptq_int4_g128": {
+      "label": "mlx_gptq_int4_g128",
+      "model_path": "/Users/yyukin0/Documents/Specter/src/results/p6_2_gptq_1.5b",
+      "wikitext2_ppl": {
+        "perplexity": null,
+        "mean_nll": null,
+        "ppl_std_error": null,
+        "n_tokens": 16352,
+        "degenerate_forward": true
+      },
+      "decode_tok_s": {
+        "mean": 99.44677492435429,
+        "std": 0.9594455218220074,
+        "n": 9
+      },
+      "prompt_tok_s": {
+        "mean": 257.0977654777758,
+        "std": 9.688983759502191,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 0.9124395022222223,
+        "std": 0.00217180319751688,
+        "n": 9
+      },
+      "process_rss_gb": 1.698332672,
+      "ppl_seq_len": 512,
+      "ppl_num_samples": 32,
+      "degenerate": true
+    },
+    "mlx_rtn_int4_g128": {
+      "label": "mlx_rtn_int4_g128",
+      "model_path": "/Users/yyukin0/Documents/Specter/src/results/p6_2_rtn_1.5b",
+      "wikitext2_ppl": {
+        "perplexity": 13.805176501060828,
+        "mean_nll": 2.6250436305999756,
+        "ppl_std_error": 0.3143151749280926,
+        "n_tokens": 16352,
+        "degenerate_forward": false
+      },
+      "decode_tok_s": {
+        "mean": 99.62750069509055,
+        "std": 5.237354688810456,
+        "n": 9
+      },
+      "prompt_tok_s": {
+        "mean": 252.4060380892542,
+        "std": 14.33846694795468,
+        "n": 9
+      },
+      "mlx_peak_memory_gb": {
+        "mean": 0.846715514888889,
+        "std": 0.00215663308267011,
+        "n": 9
+      },
+      "process_rss_gb": 1.632272384,
+      "ppl_seq_len": 512,
+      "ppl_num_samples": 32,
+      "degenerate": false
+    }
+  },
+  "disk": {
+    "fp16_mlx": {
+      "weights_gb": 3.0875,
+      "dir_gb": 3.099
+    },
+    "mlx_awq_int4_g128": {
+      "weights_gb": 0.8423,
+      "dir_gb": 0.8538
+    },
+    "mlx_gptq_int4_g128": {
+      "weights_gb": 0.886,
+      "dir_gb": 0.8975
+    },
+    "mlx_rtn_int4_g128": {
+      "weights_gb": 0.8204,
+      "dir_gb": 0.8319
+    }
+  },
+  "deltas_vs_fp16_mlx": {
+    "mlx_awq_int4_g128": 1.598,
+    "mlx_gptq_int4_g128": null,
+    "mlx_rtn_int4_g128": 2.2608
+  },
+  "cross_reference": {
+    "torch_fp16_ppl_P2.2": 12.177,
+    "torch_awq_fakequant_ppl_P2.2": 13.39,
+    "torch_fakequant_delta": 1.213,
+    "caveat": "different harness (HF sliding-window window=stride=512 vs MLX fixed-block), different tokenization path; only the ~+1.2 fake-quant delta is a sanity anchor, absolute ppl will not match"
+  },
+  "from_scratch_awq_int4_arm": {
+    "implemented": false,
+    "reason": "mlx_lm.awq exposes no custom-scale-injection API; the P2.x hand-written AWQ is a torch fake-quant path with no int4 packing. mlx_rtn_int4_g128 is the 'no calibration' stand-in."
+  },
+  "spec_decoding_tie_in": {
+    "question": "does a 4-bit target change optimal gamma? (note sec 7 C1)",
+    "status": "not run locally -- the speculative-decoding stack here is torch/MPS (speculative_generate_kv); an MLX int4 model cannot be loaded into it, and there is no torch/MPS int4 runtime (sec 9.1 Risk B). Left as: the acceptance rate is set by draft/target *distribution* agreement; a 4-bit target perturbs the target logits by ~the same magnitude as the AWQ ppl delta (+1.6), which shifts alpha a little but not the qualitative gamma* curve (consistent with the speculative-KV literature reviewed in sec 7 C1)."
+  },
+  "platform": {
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O"
+  },
+  "smoke": false,
+  "headline": "int4 shrinks weights 3.09->0.84 GB (3.7x); decode 31->104 tok/s (3.33x). wikitext2 ppl delta vs fp16: AWQ +1.598, GPTQ DEGENERATE, RTN +2.261. AWQ calibration buys +0.66 ppl over naive RTN."
+}
