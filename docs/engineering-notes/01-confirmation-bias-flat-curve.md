@@ -1,4 +1,4 @@
-# A flat curve that matched the hypothesis — because the knob was stuck
+# AWQ calibration-size ablation: the flat curve was a stuck knob, not a finding
 
 **Task:** P2.3 — how much calibration data does AWQ actually need?
 **Pitfall:** 坑16.
@@ -11,13 +11,13 @@ where GPTQ-style methods are more data-hungry. I wanted to reproduce that on the
 1.5B target: sweep `n_calib ∈ {4, 8, 16, 32, 64}`, quantize at each point, plot
 wikitext-2 perplexity, and confirm the curve goes flat early.
 
-I ran it. The curve wasn't just flat — it was **identical**. Seed 0 gave
-perplexity `13.6015` at `n_calib = 4`, and `13.6015` at 8, at 16, at 32, at 64.
-Bit-for-bit. Same quantized weights, same eval.
+I ran it. The curve wasn't just flat — it was **identical**: seed 0 gave
+perplexity `13.6015` at `n_calib = 4`, and `13.6015` at 8, at 16, at 32, at 64,
+bit-for-bit, same quantized weights, same eval.
 
-My first reaction was to write it up as a clean reproduction: "AWQ is so
-sample-efficient that 4 sequences already saturate it." That matched the paper.
-It matched my prior. I almost committed it.
+That result matched the paper's claim and my own expectation going in ("AWQ is
+sample-efficient enough that 4 sequences already saturate it"), and I nearly
+wrote it up as a clean reproduction on that basis.
 
 ## What was actually happening
 

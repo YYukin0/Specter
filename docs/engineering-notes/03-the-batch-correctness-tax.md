@@ -1,4 +1,4 @@
-# The batch correctness tax: measure the bill you chose not to pay
+# Per-sequence caches: correctness by construction, and the batch tax it avoids
 
 **Task:** P6.1 — batched / continuously-batched speculative decoding for a
 serving loop.
@@ -48,9 +48,9 @@ widths 1/2/4/8:
 | short  | 24.9 | 24.9 | 24.4 | 25.0 | 0.99–1.03× |
 | long   | 16.6 | 16.9 | 17.0 | 16.9 | 0.96–0.99× |
 
-Flat. **That flatness is the finding**, not a disappointment to hide: on this
-hardware, with per-sequence caches, you get correctness-by-construction and you
-do not get a batch speedup. If you want the speedup you have to go build the
+The result is flat, and **that flatness is the finding**, not a disappointment
+to hide: on this hardware, with per-sequence caches, you get
+correctness-by-construction and you do not get a batch speedup. If you want the speedup you have to go build the
 ragged-verify kernel and take on its correctness burden.
 
 ## Measuring the tax you didn't pay

@@ -1,4 +1,4 @@
-# Perplexity is not accuracy — and it mis-ranked two quantizers
+# Perplexity vs. downstream accuracy: two 4-bit quantizers ranked in opposite order
 
 **Task:** P6.6 (支柱7 Bullet 3) — run the self-built AWQ model through a real
 downstream benchmark (GSM8K + IFEval) instead of stopping at perplexity.
@@ -39,7 +39,7 @@ IFEval slice:
 | **self_awq**  | **12.94** | **+1.39** | **0.553** | **−0.095** | 0.393 | −0.025 |
 | **mlx_awq_int4** | **13.14** | **+1.60** | **0.608** | **−0.040** | 0.408 | −0.010 |
 
-Two things fall out, and the second one is the point of the note.
+Two results stand out here:
 
 ### 1. Reasoning degrades much more than instruction-following
 

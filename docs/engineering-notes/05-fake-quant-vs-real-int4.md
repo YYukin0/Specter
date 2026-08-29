@@ -1,4 +1,4 @@
-# Fake-quant vs real int4: the number you report depends on the runtime you can't run
+# Fake-quant vs. real int4: the reported number depends on which runtime is available
 
 **Tasks:** P2.1–P2.4 (fake-quant AWQ/GPTQ study) → P6.2 (real int4 on Apple
 silicon).

@@ -100,8 +100,9 @@ shared ragged tensor to desync, and O5 pins that under adversarial mutation.
 
 ## The finding: a real model is not a superset of the fake one
 
-I built O2 (real model, CPU/fp32, greedy-exact) expecting it to dominate O1 —
-"if the fake model catches it, surely the real one does too." It doesn't.
+O2 (real model, CPU/fp32, greedy-exact) was expected to dominate O1, on the
+assumption that anything the fake model catches, the real one should catch too.
+It does not.
 
 O2 results across 3 prompts, γ=4, 40 tokens, 9 mutation operators that O1 kills:
 

@@ -1,4 +1,4 @@
-# Getting the KV cache right: the rollback anchor is "what got fed", not "what got touched"
+# KV-cache rollback anchor: prefix + n_accepted, not prefix + k + 1
 
 **Task:** P6.0 — single-sequence speculative decoding with a real KV cache.
 **Pitfall:** 坑18.

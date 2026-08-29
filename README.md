@@ -34,26 +34,26 @@ caught it." Listed strongest-first; the file prefixes are build order.
    mutation operators, and the finding that a real-model output oracle is *not* a
    superset of the symbolic one — output-equivalence is the weakest test in the
    stack at any model fidelity.
-2. [Perplexity is not accuracy — and it mis-ranked two quantizers](docs/engineering-notes/07-perplexity-is-not-accuracy.md)
+2. [Perplexity vs. downstream accuracy: two 4-bit quantizers ranked in opposite order](docs/engineering-notes/07-perplexity-is-not-accuracy.md)
    — running the self-built AWQ through GSM8K + IFEval: 4-bit costs ~1.4 ppl but
    9.5 points of grade-school math, and perplexity ranks two AWQ implementations
    in the *opposite* order from how they reason.
-3. [Getting the KV cache right](docs/engineering-notes/02-getting-the-kv-cache-right.md)
-   — the partial-acceptance rollback anchor is `prefix + n_accepted`, not
-   `prefix + k + 1`; why the wrong formula passes on high-acceptance prompts.
-4. [A flat curve that matched the hypothesis — because the knob was stuck](docs/engineering-notes/01-confirmation-bias-flat-curve.md)
+3. [KV-cache rollback anchor: prefix + n_accepted, not prefix + k + 1](docs/engineering-notes/02-getting-the-kv-cache-right.md)
+   — why the wrong formula passes on high-acceptance prompts and only fails on
+   a genuine rejection.
+4. [AWQ calibration-size ablation: the flat curve was a stuck knob, not a finding](docs/engineering-notes/01-confirmation-bias-flat-curve.md)
    — an AWQ calibration-size ablation that was silently feeding the quantizer
    the same 512 tokens at every point.
-5. [The batch correctness tax](docs/engineering-notes/03-the-batch-correctness-tax.md)
+5. [Per-sequence caches: correctness by construction, and the batch tax it avoids](docs/engineering-notes/03-the-batch-correctness-tax.md)
    — per-sequence caches give output-equivalence by construction and a flat
    throughput curve; the realignment cost a padded batch would pay, measured.
-6. [The circuit breaker: a real signal, and a stale premise](docs/engineering-notes/04-circuit-breaker-real-signal.md)
+6. [Circuit breaker: replacing a stale batch-size signal with a real rolling acceptance rate](docs/engineering-notes/04-circuit-breaker-real-signal.md)
    — why a batch-blind cost metric makes "always speculate" unbeatable, and the
    rebuild on a real rolling acceptance rate.
-7. [Fake-quant vs real int4](docs/engineering-notes/05-fake-quant-vs-real-int4.md)
+7. [Fake-quant vs. real int4: the reported number depends on which runtime is available](docs/engineering-notes/05-fake-quant-vs-real-int4.md)
    — the number you can report depends on which runtime your backend supports;
    `mlx_lm.gptq` degeneracy as a first-class result.
-8. [A fused Metal kernel that moved 2.6× less memory and ran 1.0× as fast](docs/engineering-notes/08-a-fused-metal-kernel-and-the-roofline.md)
+8. [A fused Metal accept/reject kernel: 2.6× less memory traffic, no speedup](docs/engineering-notes/08-a-fused-metal-kernel-and-the-roofline.md)
    — a hand-written kernel for the accept/reject step vs MLX's op graph: the
    roofline says memory-bound, but a single-threadgroup kernel can't saturate
    bandwidth, and the whole op is ~2% of a target forward. `mx.compile` already

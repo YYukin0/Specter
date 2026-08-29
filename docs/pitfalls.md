@@ -254,7 +254,7 @@ several full spec→degraded→probe→spec loops) before committing the recordi
 
 ---
 
-### 坑16 — a flat curve that matched the hypothesis, because the knob was stuck
+### 坑16 — an AWQ calibration-size ablation with a stuck knob
 **Where:** P2.3, AWQ calibration-set-size ablation.
 
 The self-built AWQ path captures all 196 target Linear layers' input activations

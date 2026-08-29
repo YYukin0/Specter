@@ -1,4 +1,4 @@
-# A fused Metal kernel that moved 2.6× less memory and ran 1.0× as fast
+# A fused Metal accept/reject kernel: 2.6× less memory traffic, no speedup
 
 **Task:** P6.7 — hand-write one Metal kernel for the speculative-decoding
 accept/reject step, put it on a roofline, and find out whether beating MLX's own
@@ -94,7 +94,7 @@ with a two-level reduction (partial stats per group → global merge → second 
 for the residual row) — at which point I've re-implemented what MLX's kernel
 generator already emits, and the `mx.compile` number says it emits it well.
 
-## The part that settles it
+## The op's share of total decode cost
 
 Even a hypothetical 2× win here is **~2.3% of one target forward**. The fp16
 1.5B target decodes at 31 tok/s (P6.2) — ~32 ms per forward — and the accept step

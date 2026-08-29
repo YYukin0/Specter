@@ -1,4 +1,4 @@
-# The circuit breaker: a real signal, and a premise that had gone stale
+# Circuit breaker: replacing a stale batch-size signal with a real rolling acceptance rate
 
 **Task:** P5.3 (first cut) → P6.1 (rebuild).
 **Pitfalls:** 坑15, 坑20.
