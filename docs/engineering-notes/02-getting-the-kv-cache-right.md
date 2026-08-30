@@ -1,7 +1,7 @@
 # KV-cache rollback anchor: prefix + n_accepted, not prefix + k + 1
 
 **Task:** P6.0 — single-sequence speculative decoding with a real KV cache.
-**Pitfall:** 坑18.
+**Pitfall:** 18.
 
 ## Why this step exists
 
@@ -75,7 +75,7 @@ this 0.5B/1.5B pair on this Mac: speculative decoding is at parity here, not a
 speedup, because the draft forward isn't cheap enough relative to the target on
 Apple silicon at batch 1. The honest headline is "correct, cache-efficient, and
 this model pair on this hardware is in the dead zone" — see
-[note 05](05-fake-quant-vs-real-int4.md) and 坑4.
+[note 05](05-fake-quant-vs-real-int4.md) and Pitfall 4.
 
 ## The lesson
 

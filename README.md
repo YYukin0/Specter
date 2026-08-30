@@ -3,8 +3,6 @@
 Hand-written speculative decoding · KV-cache-correct serving loop · real int4 on
 Apple silicon · a fault-injection oracle stack for testing the decoder itself.
 
-本地推理加速引擎：手写投机解码 × KV cache × 真 int4 × 投机解码器的故障注入测试。
-
 > **How do you know your inference optimization is correct? How do you know it's
 > actually faster?**
 
@@ -17,8 +15,9 @@ circuit breaker trips once in sixteen runs. Those are in here on purpose. The
 value is the verification and measurement discipline, not a claim to a faster
 method.
 
-This repo is an engineering study, not a paper. Everything runs locally on a
-24 GB M-series Mac at $0 cloud spend. The interesting content is the
+This repo is an engineering study, not a paper. Most of it runs locally on a
+24 GB M-series Mac; one benchmark was run on a rented cloud GPU for
+cross-hardware validation (see note 9). The interesting content is the
 **engineering notes** below: each one is "a measurement that fooled me, and how I
 caught it."
 
@@ -63,7 +62,7 @@ caught it." Listed strongest-first; the file prefixes are build order.
    collapsing to 1.63× at concurrency=64, the same shape this repo's Mac-local
    parity result implies from the other end of the curve.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–29), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (Pitfall 1–29), the
 build-time ones first.
 
 ---
@@ -148,7 +147,7 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 - **Speculative decoding is at parity here, not a speedup.** `spec_kv` runs at
   0.93–1.0× of KV-cached target-only. The draft forward isn't cheap enough
   relative to the target at batch 1 on Apple silicon — this pair is in the
-  "dead zone" (坑4). It is **token-exact** with target-only greedy across
+  "dead zone" (Pitfall 4). It is **token-exact** with target-only greedy across
   γ ∈ {1,3,5}, 8 prompts, 3 seeds.
 - **Batching this design doesn't add throughput.** Per-sequence caches →
   aggregate tok/s is flat across widths 1–8 (0.96–1.03× of target-only). The
@@ -157,12 +156,12 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
 - **Real int4 (mlx-lm AWQ):** weights 3.09 → 0.84 GB (**3.7×**), decode
   31 → 104 tok/s (**3.3×**), wikitext-2 ppl **+1.60**. AWQ calibration buys
   **+0.66 ppl** over naive round-to-nearest. `mlx_lm.gptq` produced a degenerate
-  model on this architecture (坑21).
+  model on this architecture (Pitfall 21).
 - **4-bit costs reasoning, and perplexity doesn't see it.** On GSM8K (identical
   chat/few-shot config, `flexible-extract`): the from-scratch AWQ drops **9.5
   points** (64.8 → 55.3), the mlx-lm int4 model drops **4.0** — while IFEval
   moves ≤ 2.5. Perplexity ranks the two AWQ builds *backwards* vs GSM8K: the
-  self-built one is 0.2 ppl **better** and 5.5 points **worse** at math (坑23).
+  self-built one is 0.2 ppl **better** and 5.5 points **worse** at math (Pitfall 23).
 - **Adaptive-γ:** no win on this pair. The acceptance rate is high and stable, so
   there's nothing for a controller to adapt to — confirmed on 3 model pairs.
 - **A hand-written Metal kernel for the accept/reject step ties `mx.compile`.**
@@ -171,7 +170,7 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
   can't get past ~19% of the ~84 GB/s bandwidth peak while MLX's multi-kernel
   path reaches ~48%. And the whole step is **~2.3% of one target forward** (zero
   under greedy). Roofline ridge ≈ 33–36 flop/byte; this op sits at ≈ 0.4–1.5,
-  memory-bound (坑24).
+  memory-bound (Pitfall 24).
 - **Testing:** against ~20 semantic mutation operators, the output-equivalence
   oracles have a mutation score of ~0.56 (greedy) to 0.75 (sampling) — and
   **0.0 against the KV-cache-management fault class**. The real-model greedy
@@ -260,7 +259,7 @@ tests/          251 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
   engineering-notes/   the 9 stories above
-  pitfalls.md          坑1–29
+  pitfalls.md          Pitfall 1–29
   site/                self-contained lab page + the recorded run it replays
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)

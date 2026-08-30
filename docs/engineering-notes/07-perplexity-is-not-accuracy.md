@@ -1,12 +1,12 @@
 # Perplexity vs. downstream accuracy: two 4-bit quantizers ranked in opposite order
 
-**Task:** P6.6 (支柱7 Bullet 3) — run the self-built AWQ model through a real
+**Task:** P6.6 (Pillar 7 Bullet 3) — run the self-built AWQ model through a real
 downstream benchmark (GSM8K + IFEval) instead of stopping at perplexity.
-**Pitfalls:** 坑22, 坑23; Bullet 3 pitfalls 1–5.
+**Pitfalls:** 22, 23; Bullet 3 pitfalls 1–5.
 
 ## Why this step exists
 
-支柱2 measured 4-bit AWQ the cheap way: wikitext-2 perplexity. The self-built
+Pillar 2 measured 4-bit AWQ the cheap way: wikitext-2 perplexity. The self-built
 fake-quant path costs about **+1.2–1.4 ppl** on the 1.5B target; the mlx-lm
 production int4 model costs **+1.6 ppl** (P6.2). Both look like small, similar
 hits. The obvious question the ppl number can't answer: does the model still
@@ -87,7 +87,7 @@ those details barely register on perplexity while moving GSM8K by 5 points.
 
 ## Pitfalls hit along the way
 
-- **strict-match is unreliable with a chat model** (坑22). GSM8K's `strict-match`
+- **strict-match is unreliable with a chat model** (Pitfall 22). GSM8K's `strict-match`
   filter wants the answer at a fixed position (`#### 42`); Qwen's chat template
   produces a chatty CoT that ends "...so the total is **72**." fp16 itself scores
   only 0.378 strict vs 0.648 flexible. The strict-match *deltas* (−22, −17 pts)

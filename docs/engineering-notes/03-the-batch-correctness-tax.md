@@ -2,7 +2,7 @@
 
 **Task:** P6.1 — batched / continuously-batched speculative decoding for a
 serving loop.
-**Pitfall:** 坑19.
+**Pitfall:** 19.
 
 ## The problem batching creates for speculative decoding
 

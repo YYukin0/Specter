@@ -3,7 +3,7 @@
 **Task:** P6.7 — hand-write one Metal kernel for the speculative-decoding
 accept/reject step, put it on a roofline, and find out whether beating MLX's own
 op graph is possible or worth it.
-**Pitfall:** 坑24.
+**Pitfall:** 24.
 **Code:** `src/metal_accept_kernel.py`, `src/verify_p6_7_metal_roofline.py`,
 `results/p6_7_metal_roofline.json`.
 
@@ -109,7 +109,7 @@ optimisation. Worth doing once to know where the line is.
 
 ## Pitfall hit along the way
 
-- **NaN when the vocab is smaller than the threadgroup** (坑24). The one-pass
+- **NaN when the vocab is smaller than the threadgroup** (Pitfall 24). The one-pass
   online-softmax merge computes `mM = max(mA, mB)` then `sA·exp(mA−mM) +
   sB·exp(mB−mM)`. When V < 1024, the surplus threads never enter the reduction
   loop and carry the identity `(m, s) = (−∞, 0)`; two of them merging gives

@@ -2,11 +2,11 @@
 
 **Tasks:** P2.1–P2.4 (fake-quant AWQ/GPTQ study) → P6.2 (real int4 on Apple
 silicon).
-**Pitfall:** 坑21.
+**Pitfall:** 21.
 
 ## Two different things both called "int4"
 
-Most of the quantization study (支柱2) runs **fake quantization**: weights are
+Most of the quantization study (Pillar 2) runs **fake quantization**: weights are
 rounded to a 4-bit grid, then stored and multiplied as fp16. The arithmetic is
 still fp16 matmul on the MPS backend. This is the right tool for studying
 *quantization error* — calibration-set effects, cross-distribution robustness,
@@ -36,7 +36,7 @@ Headline: real int4 shrinks the weights **3.7×** and speeds decode **3.3×**, f
 **+1.6 ppl**. AWQ's calibration buys **+0.66 ppl** over naive round-to-nearest —
 that's the concrete value of activation-aware scaling on this model.
 
-Compare to the fake-quant AWQ result from 支柱2: **+1.2 ppl** (torch
+Compare to the fake-quant AWQ result from Pillar 2: **+1.2 ppl** (torch
 sliding-window harness, fp16 baseline 12.18). The real-int4 penalty is
 *somewhat larger* (+1.6 vs +1.2), but the harnesses differ — non-overlapping mlx
 blocks vs torch sliding window, different fp16 baselines — so the two numbers are
@@ -44,7 +44,7 @@ blocks vs torch sliding window, different fp16 baselines — so the two numbers 
 delta. The honest statement is: fake-quant is a lower bound on the error; the
 real kernel's extra rounding in the fused path pushes it up modestly.
 
-## The GPTQ degeneracy (坑21)
+## The GPTQ degeneracy (Pitfall 21)
 
 `mlx_lm.gptq` at bits=4 g=128 on this model produced a model that emits a
 constant `!` and whose forward NLL is `nan`. First hypothesis was calibration

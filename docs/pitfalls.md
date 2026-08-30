@@ -1,4 +1,4 @@
-# Pitfalls (坑表)
+# Pitfalls
 
 A running log of the traps this project hit or deliberately steered around. The
 numbered list mirrors `notes/project_plan_v9.md` §9.2 — this file is the
@@ -9,10 +9,10 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–29; 坑13–21 on 2026-08-28, 坑22–26 on 2026-08-29, 坑27–29 on 2026-08-30)
+## Found while building (Pitfalls 13–29; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30)
 
-### 坑29 — vLLM's V1 engine flatly refuses draft-model speculative decoding
-**Where:** Bullet 2 (支柱7), full arm × concurrency matrix on the rented A40.
+### Pitfall 29 — vLLM's V1 engine flatly refuses draft-model speculative decoding
+**Where:** Bullet 2 (Pillar 7), full arm × concurrency matrix on the rented A40.
 
 The plan's fourth arm, `draft_model` (a small same-family model as the draft
 instead of a lookahead/eagle head), crashed the `vllm serve` process before it
@@ -44,8 +44,8 @@ method's own advertised list before building a matrix around it.
 
 ---
 
-### 坑28 — a placeholder GuideLLM output schema guess never matched, silently
-**Where:** Bullet 2 (支柱7), `orchestrate.normalize_guidellm_result`.
+### Pitfall 28 — a placeholder GuideLLM output schema guess never matched, silently
+**Where:** Bullet 2 (Pillar 7), `orchestrate.normalize_guidellm_result`.
 
 Written before any real `guidellm run` output existed, this function dug for
 fields at `raw["metrics"]["output_tokens_per_second"]["mean"]` with a flat-shape
@@ -77,8 +77,8 @@ to look at what it actually produced, once, against real data.
 
 ---
 
-### 坑27 — GuideLLM has no default stopping point against a real dataset
-**Where:** Bullet 2 (支柱7), `orchestrate.guidellm_cmd`.
+### Pitfall 27 — GuideLLM has no default stopping point against a real dataset
+**Where:** Bullet 2 (Pillar 7), `orchestrate.guidellm_cmd`.
 
 The first real sanity-check run — `baseline` arm, concurrency=1, against the
 full 1319-row GSM8K test split — was still running 8+ minutes in with no end
@@ -107,7 +107,7 @@ each request is fully serial.
 
 ---
 
-### 坑18 — the partial-acceptance rollback formula in the plan was wrong
+### Pitfall 18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
 
 The plan said: on a partial acceptance, crop the target KV cache to
@@ -141,7 +141,7 @@ through a forward", not "how many tokens this round touched".
 
 ---
 
-### 坑19 — the batch correctness/throughput trade-off is real; measure the tax you don't pay
+### Pitfall 19 — the batch correctness/throughput trade-off is real; measure the tax you don't pay
 **Where:** P6.1, output-equivalent batched speculative decoding (`src/spec_kv_batch.py`).
 
 Every naive way to batch speculative decoding (masking, rollback, dynamic
@@ -149,7 +149,7 @@ padding) breaks output equivalence: different sequences accept different numbers
 of draft tokens per round, so position ids / attention masks / KV-cache lengths
 drift apart across rounds (EQSPEC, arXiv:2510.22876).
 
-The choice here was **not to fix the masking path but to sidestep it**:每
+The choice here was **not to fix the masking path but to sidestep it**: each
 sequence gets its own KV cache, and a "batch round" runs the already-verified
 single-sequence step once per sequence. No shared ragged tensor → nothing drifts
 → output equivalence holds **by construction** (a test pins
@@ -171,7 +171,7 @@ as a first-class measurement, don't pretend batch speedup is free.
 
 ---
 
-### 坑20 — a circuit breaker on a synthetic signal can't be evaluated honestly
+### Pitfall 20 — a circuit breaker on a synthetic signal can't be evaluated honestly
 **Where:** P5.3 → P6.1, the batch-aware circuit breaker.
 
 P5.3's cost model was `total_emitted / total_cost_units` with a speculative round
@@ -189,7 +189,7 @@ last `alpha_window` acceptance decisions across all sequences) `< alpha_floor`,
 optionally also on a target-only latency probe showing speculative rounds are
 wall-clock slower. `len(active)` is an *input*, never the rule. While degraded,
 force a speculative probe every `reprobe_every` rounds so α stays observable
-(坑11). Over 16 runs the breaker tripped exactly once (`long / width 2 /
+(Pitfall 11). Over 16 runs the breaker tripped exactly once (`long / width 2 /
 breaker on`) and **never** because of batch size (width 8 never degrades).
 
 **Lesson:** a circuit breaker only earns its keep on a workload where α actually
@@ -198,7 +198,7 @@ bug. Honest validation needs a pair / distribution that genuinely drives α down
 
 ---
 
-### 坑21 — `mlx_lm.gptq` produced a degenerate model; sentinel-check every third-party artifact
+### Pitfall 21 — `mlx_lm.gptq` produced a degenerate model; sentinel-check every third-party artifact
 **Where:** P6.2, real int4 via mlx-lm.
 
 `mlx_lm.gptq` (mlx-lm 0.31.3), Qwen2.5-1.5B-Instruct, bits=4 group-size=128:
@@ -225,8 +225,8 @@ the results: "this tool doesn't work on this architecture" is useful information
 
 ---
 
-### 坑22 — GSM8K `strict-match` is a format check, not an arithmetic check, when the model is a chat model
-**Where:** P6.6 (支柱7 Bullet 3), downstream eval of AWQ.
+### Pitfall 22 — GSM8K `strict-match` is a format check, not an arithmetic check, when the model is a chat model
+**Where:** P6.6 (Pillar 7 Bullet 3), downstream eval of AWQ.
 
 lm-eval's GSM8K task reports two numbers: `strict-match` (the answer must appear
 as `#### <number>` at a fixed position) and `flexible-extract` (last number in
@@ -247,8 +247,8 @@ change is not a measurement of your change.
 
 ---
 
-### 坑23 — perplexity mis-ranked two 4-bit AWQ implementations for reasoning
-**Where:** P6.6 (支柱7 Bullet 3).
+### Pitfall 23 — perplexity mis-ranked two 4-bit AWQ implementations for reasoning
+**Where:** P6.6 (Pillar 7 Bullet 3).
 
 On the identical wikitext-2 harness, the self-built AWQ scores **+1.39 ppl** vs
 fp16 and the `mlx_lm.awq` int4 model scores **+1.60** — so perplexity says the
@@ -275,8 +275,8 @@ calibration details decide whether the model can still reason.
 
 ---
 
-### 坑24 — a fused Metal kernel NaN'd only when the vocab was smaller than the threadgroup
-**Where:** P6.7 (支柱7 optional), `src/metal_accept_kernel.py`.
+### Pitfall 24 — a fused Metal kernel NaN'd only when the vocab was smaller than the threadgroup
+**Where:** P6.7 (Pillar 7 optional), `src/metal_accept_kernel.py`.
 
 The fused accept/reject kernel does a one-pass online softmax per row: each
 thread keeps a running max `m` and running sum-of-exp `s` over its stride of V,
@@ -298,8 +298,8 @@ kernel tests use V = 256 on purpose.
 
 ---
 
-### 坑25 — an SSE stream over HTTP/1.1 keep-alive hangs the client forever
-**Where:** P6.8 (支柱7), `src/serve_http.py`.
+### Pitfall 25 — an SSE stream over HTTP/1.1 keep-alive hangs the client forever
+**Where:** P6.8 (Pillar 7), `src/serve_http.py`.
 
 The first smoke test of the `/generate` endpoint never returned — a 2-minute
 timeout with the server process still alive. `BaseHTTPRequestHandler` with
@@ -321,8 +321,8 @@ end-of-stream path, not just that bytes arrive.
 
 ---
 
-### 坑26 — a circuit-breaker demo scenario that tripped once and never came back
-**Where:** P6.8 polish (支柱7), the "Breaker trips" replay scenario in
+### Pitfall 26 — a circuit-breaker demo scenario that tripped once and never came back
+**Where:** P6.8 polish (Pillar 7), the "Breaker trips" replay scenario in
 `src/serve_http.py`.
 
 To make the mode strip visibly cycle spec → degraded → probe → spec on the
@@ -331,7 +331,7 @@ vs 0.5) on the theory that "higher floor = trips more reliably." It did trip —
 immediately, on round 2 — but then never recovered: the rolling α for this
 draft/target pair on this prompt oscillates in a band roughly 0.5–0.75, so a
 0.92 floor sat entirely above the band the model could ever reach. Every
-periodic re-probe (坑11's mechanism) measured α, found it still short of 0.92,
+periodic re-probe (Pitfall 11's mechanism) measured α, found it still short of 0.92,
 and went straight back to degraded. The strip showed exactly one green bar
 followed by a wall of red with amber re-probe ticks — not the trip-and-recover
 cycle the scenario was supposed to demonstrate.
@@ -350,7 +350,7 @@ several full spec→degraded→probe→spec loops) before committing the recordi
 
 ---
 
-### 坑16 — an AWQ calibration-size ablation with a stuck knob
+### Pitfall 16 — an AWQ calibration-size ablation with a stuck knob
 **Where:** P2.3, AWQ calibration-set-size ablation.
 
 The self-built AWQ path captures all 196 target Linear layers' input activations
@@ -376,7 +376,7 @@ boolean that auto-annotates the verdict string when `max/min ≤ 1.5×`; drop
 
 ---
 
-### 坑17 — the "cached" code corpus was only a README
+### Pitfall 17 — the "cached" code corpus was only a README
 **Where:** P2.2, cross-distribution AWQ.
 
 Notes said `codeparrot/codeparrot-clean-valid` and `allenai/c4` were cached
@@ -397,34 +397,34 @@ GPTQ arm and real code corpora deferred to a later stage.
 
 ---
 
-### 坑13 / 坑14 / 坑15 — the earlier implementation-hit traps
+### Pitfalls 13, 14, 15 — the earlier implementation-hit traps
 
-- **坑13 (M2, P1.2):** greedy speculative decoding is only token-exact with
+- **Pitfall 13 (M2, P1.2):** greedy speculative decoding is only token-exact with
   greedy target-only if the tie-breaking and the "compare argmax, not sampled
   token" convention match exactly on both paths; a mismatch shows up as a slow
   drift, not a crash.
-- **坑14 (M4, P5.0/P5.1):** the GammaTune null result — the main model pair sits
+- **Pitfall 14 (M4, P5.0/P5.1):** the GammaTune null result — the main model pair sits
   at α ≈ 0.79 with too little variance for an adaptive-γ controller to help;
-  confirmed on 3 model pairs (see 坑9 补记), so the null is robust, not an
+  confirmed on 3 model pairs (see the Pitfall 9 addendum), so the null is robust, not an
   artifact of one pair.
-- **坑15 (M4, P5.3):** see 坑20 — the synthetic batch signal made "always
+- **Pitfall 15 (M4, P5.3):** see Pitfall 20 — the synthetic batch signal made "always
   speculate" an unbeatable upper bound for the breaker's cost metric.
 
 ---
 
-## Anticipated from prior art (坑1–12)
+## Anticipated from prior art (Pitfalls 1–12)
 
 These came out of the literature review *before* implementation and shaped the
 design; most were designed around rather than hit.
 
 | # | Trap | Guard |
 |---|------|-------|
-| 坑1 | Tokenizer / vocab mismatch silently zeros the acceptance rate (even within a family: Qwen2 1.5B vocab 151936 vs 72B 152064). | P1.0 asserts vocab identity. |
-| 坑2 | Bonus-token sampled from the *draft* distribution (a real DSD bug) — violates correctness, doesn't crash. | Unit test pins which model's logits the bonus token comes from. |
-| 坑3 | `batch > 1` ragged-tensor desync — sequences accept different token counts, so position ids / masks / cache lengths go ragged. | 支柱4 maintains per-sequence state by hand; see 坑19. |
-| 坑4 | Draft/target "dead zone" — a size gap under ~2–3× can be slower than no speculation. AdaEDL reports static SPD 16% *slower* than autoregressive for one bad pair, +43% *faster* once adaptive early-stop is added. | Diagnostic: α is fine but wall-clock regresses → check the draft's own latency share first. |
-| 坑5 | Calibration-distribution mismatch overfits GPTQ badly, AWQ less so (cross-distribution: AWQ +0.5–0.6, GPTQ +2.3–4.9). | P2.2 reproduces the matrix. |
-| 坑9 | GammaTune degrades under adversarial / highly non-stationary workloads and helps little when draft/target already agree. | P5.1 non-stationary test; 坑9 补记 confirms the low-variance regime can't be escaped within the Qwen2.5-Instruct family. |
-| 坑10 | Optimal γ shifts with target quantization (SpecKV: FP16 γ=2 → INT8 γ=8 under BitsAndBytes, a 4× shift) — quantization and adaptive control are not independent. AWQ's per-channel scaling may shift it *less*; that would be a finding, not an error. | P5.2 reuses the 支柱2 quant models + a BnB NF4 same-source control arm. |
-| 坑11 | DSD-style breakers "stop collecting data when disabled" and can't re-enable; BanditSpec ignores KV-cache rebuild cost. | P5.3/P6.1 breaker has periodic re-probing + measured switch cost (Nightjar's 17.87–102 ms is the sanity band). |
-| 坑12 | BanditSpec's K-armed frame doesn't treat batch size as context and its regret bound ignores switch cost. | Cited for comparison only; not reimplemented. |
+| Pitfall 1 | Tokenizer / vocab mismatch silently zeros the acceptance rate (even within a family: Qwen2 1.5B vocab 151936 vs 72B 152064). | P1.0 asserts vocab identity. |
+| Pitfall 2 | Bonus-token sampled from the *draft* distribution (a real DSD bug) — violates correctness, doesn't crash. | Unit test pins which model's logits the bonus token comes from. |
+| Pitfall 3 | `batch > 1` ragged-tensor desync — sequences accept different token counts, so position ids / masks / cache lengths go ragged. | Pillar 4 maintains per-sequence state by hand; see Pitfall 19. |
+| Pitfall 4 | Draft/target "dead zone" — a size gap under ~2–3× can be slower than no speculation. AdaEDL reports static SPD 16% *slower* than autoregressive for one bad pair, +43% *faster* once adaptive early-stop is added. | Diagnostic: α is fine but wall-clock regresses → check the draft's own latency share first. |
+| Pitfall 5 | Calibration-distribution mismatch overfits GPTQ badly, AWQ less so (cross-distribution: AWQ +0.5–0.6, GPTQ +2.3–4.9). | P2.2 reproduces the matrix. |
+| Pitfall 9 | GammaTune degrades under adversarial / highly non-stationary workloads and helps little when draft/target already agree. | P5.1 non-stationary test; the Pitfall 9 addendum confirms the low-variance regime can't be escaped within the Qwen2.5-Instruct family. |
+| Pitfall 10 | Optimal γ shifts with target quantization (SpecKV: FP16 γ=2 → INT8 γ=8 under BitsAndBytes, a 4× shift) — quantization and adaptive control are not independent. AWQ's per-channel scaling may shift it *less*; that would be a finding, not an error. | P5.2 reuses the Pillar 2 quant models + a BnB NF4 same-source control arm. |
+| Pitfall 11 | DSD-style breakers "stop collecting data when disabled" and can't re-enable; BanditSpec ignores KV-cache rebuild cost. | P5.3/P6.1 breaker has periodic re-probing + measured switch cost (Nightjar's 17.87–102 ms is the sanity band). |
+| Pitfall 12 | BanditSpec's K-armed frame doesn't treat batch size as context and its regret bound ignores switch cost. | Cited for comparison only; not reimplemented. |

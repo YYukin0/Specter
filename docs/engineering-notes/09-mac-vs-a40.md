@@ -1,10 +1,10 @@
 # Mac vs. rented A40: the same break-even story, at a very different price
 
-**Task:** Bullet 2 (支柱7) — a one-time rented-GPU run of the same
+**Task:** Bullet 2 (Pillar 7) — a one-time rented-GPU run of the same
 speculative-decoding question this repo asks on Apple silicon, against a
 production stack: vLLM 0.10.2, real EAGLE3 head, real concurrency, a real
 GSM8K workload.
-**Pitfall:** 坑27, 坑28, 坑29.
+**Pitfalls:** 27, 28, 29.
 **Code:** `src/cloud_bench/` (`config.py`, `orchestrate.py`, `sanity_check.py`),
 `tests/test_cloud_bench.py`, `results/bullet2_vllm_eagle3.json`,
 `results/cloud_bench_raw/`.
@@ -14,7 +14,7 @@ GSM8K workload.
 Everything else in this repo runs on a 24 GB M-series Mac, a draft/target pair
 picked to fit in unified memory (`Qwen2.5-0.5B/1.5B-Instruct`), and a
 from-scratch decode loop. The headline finding on that setup is **parity, not
-a speedup** — this model pair sits in the "dead zone" (坑4) where the draft
+a speedup** — this model pair sits in the "dead zone" (Pitfall 4) where the draft
 forward isn't cheap enough relative to the target to pay for itself.
 
 That raises an obvious question a Mac-only repo can't answer on its own: is
@@ -37,12 +37,12 @@ prompt-lookup decoding, no draft model), `baseline` (no speculation) — swept
 across concurrency ∈ {1, 4, 16, 32, 64}, `guidellm` driving the load against
 vLLM's own OpenAI-compatible server. A fourth planned arm, `draft_model`
 (small-model-as-draft instead of a trained head), never got past `vllm serve`
-startup — see 坑29.
+startup — see Pitfall 29.
 
 Every arm × concurrency point runs for a fixed 60-second window
 (`--constraint kind=max_duration,seconds=60`) rather than to a fixed request
 count — necessary because `guidellm run` has no default stopping point at all
-against a real (non-synthetic) dataset (坑27), and I found that out by
+against a real (non-synthetic) dataset (Pitfall 27), and I found that out by
 watching a concurrency=1 baseline run 8 minutes with no end in sight.
 
 ## The result
@@ -103,7 +103,7 @@ c=64) both erode the same underlying margin, for different reasons.
   The point was to check the *shape* of the curve against the Mac-local
   finding and prior art, not to publish a tight confidence interval.
 - **`draft_model` arm is absent, not zero.** vLLM 0.10.2's V1 engine doesn't
-  support that method at all (坑29) — the table above compares EAGLE3 and
+  support that method at all (Pitfall 29) — the table above compares EAGLE3 and
   n-gram against baseline, not all four originally planned arms.
 - **A40, not A100.** The GPU actually rented differs from the one named in
   earlier planning notes (payment issues with the original provider forced a

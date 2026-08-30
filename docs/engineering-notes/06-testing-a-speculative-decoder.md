@@ -2,7 +2,7 @@
 
 **Task:** P6.5 — a fault-injection / mutation-testing methodology for
 speculative-decoding implementations.
-**Pitfalls:** 坑2, 坑13, and the M-KV / M-POS blind spots below.
+**Pitfalls:** 2, 13, and the M-KV / M-POS blind spots below.
 
 ## Where this sits
 
@@ -37,7 +37,7 @@ token. It is blind to any bug that corrupts internal state in a way that happens
 not to change the argmax on the prompts you tried. And a lot of real
 speculative-decoding bugs are exactly that shape — a KV cache cropped to the
 wrong length ([note 02](02-getting-the-kv-cache-right.md)), a position index off
-by one, a bonus token drawn from the wrong distribution (坑2). On a high-
+by one, a bonus token drawn from the wrong distribution (Pitfall 2). On a high-
 acceptance model pair at greedy, several of those produce identical output for
 dozens of tokens before drifting, or never drift on a short prompt at all.
 

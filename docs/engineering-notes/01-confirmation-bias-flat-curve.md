@@ -1,7 +1,7 @@
 # AWQ calibration-size ablation: the flat curve was a stuck knob, not a finding
 
 **Task:** P2.3 — how much calibration data does AWQ actually need?
-**Pitfall:** 坑16.
+**Pitfall:** 16.
 
 ## The setup
 

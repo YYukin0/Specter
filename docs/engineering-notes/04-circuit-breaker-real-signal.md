@@ -1,7 +1,7 @@
 # Circuit breaker: replacing a stale batch-size signal with a real rolling acceptance rate
 
 **Task:** P5.3 (first cut) → P6.1 (rebuild).
-**Pitfalls:** 坑15, 坑20.
+**Pitfalls:** 15, 20.
 
 ## The original idea
 
@@ -53,7 +53,7 @@ The breaker now trips on signals that are **actually observable on this box**:
 `len(active_sequences)` is an **input** to the policy, never the rule by itself.
 And while degraded, the loop forces a speculative **probe round** every
 `reprobe_every` rounds so α stays measurable — otherwise a breaker that's
-disabled speculation has no data to decide to re-enable it (坑11: DSD-style
+disabled speculation has no data to decide to re-enable it (Pitfall 11: DSD-style
 breakers that "stop collecting when off" can never turn back on).
 
 ## What it actually did
