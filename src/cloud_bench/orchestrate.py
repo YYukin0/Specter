@@ -121,45 +121,37 @@ def wait_for_health(
     return False
 
 
-def _dig(d: dict, path: list[str], default=None):
-    cur = d
-    for key in path:
-        if not isinstance(cur, dict) or key not in cur:
-            return default
-        cur = cur[key]
-    return cur
-
-
 def normalize_guidellm_result(raw: dict, concurrency: int) -> dict:
-    """Best-effort extraction of the fields we need, tolerant of either the
-    flat or nested-metrics shape GuideLLM has used across versions. Adjust the
-    _dig() paths once real output has been seen on the box -- this is a
-    placeholder mapping, not a verified schema."""
-    def first(*paths):
-        for p in paths:
-            v = _dig(raw, p)
-            if v is not None:
-                return v
-        return None
+    """Extract the fields we need from a guidellm==0.7.3 `run` JSON output.
+
+    Schema verified live against a real `guidellm run` output on the rented
+    A40 (2026-08-30, results/cloud_bench_raw/guidellm_baseline_c1.json) --
+    the earlier version of this function was a placeholder guessing at
+    field paths that never matched, silently producing all-null records
+    (caught because compute_speedup would have divided by None, not because
+    anything crashed -- 坑25 continued). Real shape:
+    `raw = {"metadata", "config", "benchmarks": [...]}`; each
+    `benchmarks[i]["metrics"][<metric_name>]` is a per-completion-status
+    breakdown (`{"successful": <stats>, "errored": <stats>, ...}`), and each
+    `<stats>` is a full distribution object (`mean`, `median`, `percentiles`
+    with keys like `p99`, etc.). GuideLLM measures serving performance only
+    -- there is no acceptance-rate metric in its schema at all, so that
+    field is always None here (vLLM's own `/metrics` Prometheus endpoint
+    would be the place to get it, not guidellm)."""
+    benchmarks = raw.get("benchmarks") or [{}]
+    metrics = benchmarks[0].get("metrics", {}) if benchmarks else {}
+
+    def stat(metric_name: str, stat_name: str = "mean"):
+        bucket = metrics.get(metric_name, {})
+        successful = bucket.get("successful") if isinstance(bucket, dict) else None
+        return successful.get(stat_name) if isinstance(successful, dict) else None
 
     return {
         "concurrency": concurrency,
-        "mean_output_tokens_per_sec": first(
-            ["metrics", "output_tokens_per_second", "mean"],
-            ["output_tokens_per_second"],
-        ),
-        "ttft_p99_ms": first(
-            ["metrics", "time_to_first_token_ms", "p99"],
-            ["ttft_p99_ms"],
-        ),
-        "tpot_p99_ms": first(
-            ["metrics", "time_per_output_token_ms", "p99"],
-            ["tpot_p99_ms"],
-        ),
-        "mean_acceptance_rate": first(
-            ["metrics", "acceptance_rate", "mean"],
-            ["acceptance_rate"],
-        ),
+        "mean_output_tokens_per_sec": stat("output_tokens_per_second"),
+        "ttft_p99_ms": stat("time_to_first_token_ms", "p99"),
+        "tpot_p99_ms": stat("time_per_output_token_ms", "p99"),
+        "mean_acceptance_rate": None,
     }
 
 

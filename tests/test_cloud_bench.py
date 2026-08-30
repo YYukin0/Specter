@@ -16,6 +16,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from cloud_bench import config, orchestrate, sanity_check  # noqa: E402
 
 
+def _fake_guidellm_json(output_tokens_per_sec: float) -> str:
+    """Real guidellm==0.7.3 `run` output shape (verified live on the rented
+    A40, 2026-08-30) -- see normalize_guidellm_result's docstring."""
+    return json.dumps({
+        "benchmarks": [
+            {"metrics": {"output_tokens_per_second": {"successful": {"mean": output_tokens_per_sec}}}}
+        ]
+    })
+
+
 # --------------------------------------------------------------------- config
 
 def test_arm_specs_cover_expected_names():
@@ -130,10 +140,21 @@ def test_wait_for_health_times_out_when_never_healthy():
 
 # ------------------------------------------------------------- result normalize
 
-def test_normalize_guidellm_result_prefers_nested_metrics_shape():
-    raw = {"metrics": {"output_tokens_per_second": {"mean": 42.0},
-                        "time_to_first_token_ms": {"p99": 123.0},
-                        "time_per_output_token_ms": {"p99": 7.0}}}
+def test_normalize_guidellm_result_reads_real_schema():
+    # Shape verified live against a real `guidellm run` output on the rented
+    # A40 (2026-08-30): raw = {"metadata", "config", "benchmarks": [...]},
+    # each metrics[<name>] is {"successful": {...distribution stats...}, ...}.
+    raw = {
+        "benchmarks": [
+            {
+                "metrics": {
+                    "output_tokens_per_second": {"successful": {"mean": 42.0}},
+                    "time_to_first_token_ms": {"successful": {"p99": 123.0}},
+                    "time_per_output_token_ms": {"successful": {"p99": 7.0}},
+                }
+            }
+        ]
+    }
     rec = orchestrate.normalize_guidellm_result(raw, concurrency=4)
     assert rec == {
         "concurrency": 4,
@@ -144,11 +165,10 @@ def test_normalize_guidellm_result_prefers_nested_metrics_shape():
     }
 
 
-def test_normalize_guidellm_result_falls_back_to_flat_shape():
-    raw = {"output_tokens_per_second": 10.0, "ttft_p99_ms": 5.0}
-    rec = orchestrate.normalize_guidellm_result(raw, concurrency=1)
-    assert rec["mean_output_tokens_per_sec"] == 10.0
-    assert rec["ttft_p99_ms"] == 5.0
+def test_normalize_guidellm_result_tolerates_missing_benchmarks():
+    rec = orchestrate.normalize_guidellm_result({}, concurrency=1)
+    assert rec["mean_output_tokens_per_sec"] is None
+    assert rec["ttft_p99_ms"] is None
 
 
 # ------------------------------------------------------------------ speedup math
@@ -200,7 +220,7 @@ def test_run_matrix_executes_and_collects_results(tmp_path, monkeypatch):
     def fake_run(cmd, check=True):
         out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps({"output_tokens_per_second": 50.0}))
+        out_path.write_text(_fake_guidellm_json(50.0))
 
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
     matrix = orchestrate.run_matrix(
@@ -225,7 +245,7 @@ def test_run_matrix_resumes_from_existing_raw_output(tmp_path, monkeypatch):
     # Simulate a prior crashed run: concurrency=1 already has a valid raw
     # output file on disk; concurrency=4 does not.
     cached = tmp_path / "guidellm_baseline_c1.json"
-    cached.write_text(json.dumps({"output_tokens_per_second": 50.0}))
+    cached.write_text(_fake_guidellm_json(50.0))
 
     calls = []
 
@@ -237,7 +257,7 @@ def test_run_matrix_resumes_from_existing_raw_output(tmp_path, monkeypatch):
         out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         calls.append(out_path.name)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps({"output_tokens_per_second": 99.0}))
+        out_path.write_text(_fake_guidellm_json(99.0))
 
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
     matrix = orchestrate.run_matrix(
@@ -252,7 +272,7 @@ def test_run_matrix_resumes_from_existing_raw_output(tmp_path, monkeypatch):
 
 
 def test_run_matrix_skips_server_start_when_arm_fully_cached(tmp_path):
-    (tmp_path / "guidellm_baseline_c1.json").write_text(json.dumps({"output_tokens_per_second": 50.0}))
+    (tmp_path / "guidellm_baseline_c1.json").write_text(_fake_guidellm_json(50.0))
 
     def boom_popen(cmd):
         raise AssertionError("server should not be started when every point is already cached")
@@ -275,7 +295,7 @@ def test_run_matrix_rereuns_point_with_corrupt_cached_file(tmp_path, monkeypatch
 
     def fake_run(cmd, check=True):
         out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
-        out_path.write_text(json.dumps({"output_tokens_per_second": 77.0}))
+        out_path.write_text(_fake_guidellm_json(77.0))
 
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
     matrix = orchestrate.run_matrix(
@@ -300,7 +320,7 @@ def test_run_matrix_checkpoints_aggregated_results_after_each_point(tmp_path, mo
             # by the time the second point runs, the checkpoint from the
             # first point must already be on disk
             seen_at_second_call.update(json.loads(checkpoint.read_text()))
-        out_path.write_text(json.dumps({"output_tokens_per_second": 10.0}))
+        out_path.write_text(_fake_guidellm_json(10.0))
 
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
     orchestrate.run_matrix(
