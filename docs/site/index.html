@@ -271,7 +271,7 @@
       (vLLM 0.10.2's V1 engine doesn't support the draft-model method &mdash;
       see <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a>
       Pitfall 27). See engineering note&nbsp;09 for the Mac-vs-cloud writeup.
-      Scrub or play through the concurrency sweep below to see <em>why</em> the
+      Scrub through the concurrency sweep below to see <em>why</em> the
       speedup collapses under load: time-to-first-token drops as batching kicks
       in, then time-per-output-token climbs back up as the GPU saturates.</p>
     <div id="cloud-body"></div>
@@ -429,7 +429,6 @@ function renderCloud(){
   box.innerHTML = `
     <div class="controls" style="margin-bottom:14px">
       <span class="seg" id="cloud-scrub">${xs.map(c=>`<button data-c="${c}">c=${c}</button>`).join("")}</span>
-      <button class="btn ghost" id="cloud-play">&#9654;&nbsp; Play sweep</button>
     </div>
     <div class="chartwrap"><canvas id="cloud-chart"></canvas></div>
     <div class="legend" id="cloud-legend"></div>
@@ -462,7 +461,7 @@ function renderCloud(){
       pts.forEach((p,j)=>{ const x=xFor(p.concurrency), y=yFor(p.speedup); j?ctx.lineTo(x,y):ctx.moveTo(x,y); });
       ctx.stroke();
     });
-    // a scrubbed/playing concurrency gets a marker on every arm's line, so the
+    // the scrubbed concurrency gets a marker on every arm's line, so the
     // armgrid/metricbars readouts below have something to visually anchor to
     if(activeC != null){
       const ax = xFor(activeC);
@@ -510,31 +509,15 @@ function renderCloud(){
     });
   }
 
-  let active = xs[0], playing = false, playTimer = null;
+  let active = xs[0];
   function select(c){
     active = c;
     [...$("cloud-scrub").children].forEach(b=>b.classList.toggle("on", +b.dataset.c === c));
     drawChart(c); renderArmgrid(c); renderBars(c);
   }
-  function stopPlay(){
-    playing = false; clearInterval(playTimer);
-    $("cloud-play").innerHTML = "&#9654;&nbsp; Play sweep";
-  }
   $("cloud-scrub").onclick = e=>{
     const b = e.target.closest("button[data-c]"); if(!b) return;
-    stopPlay(); select(+b.dataset.c);
-  };
-  $("cloud-play").onclick = ()=>{
-    if(playing){ stopPlay(); return; }
-    playing = true; $("cloud-play").innerHTML = "&#10074;&#10074;&nbsp; Pause";
-    let idx = xs.indexOf(active);
-    if(idx < 0 || idx >= xs.length-1) idx = -1;
-    select(xs[idx+1]);
-    playTimer = setInterval(()=>{
-      const i = xs.indexOf(active);
-      if(i >= xs.length-1){ stopPlay(); return; }
-      select(xs[i+1]);
-    }, 1100);
+    select(+b.dataset.c);
   };
   select(xs[0]);
 }
