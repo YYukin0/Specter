@@ -1,0 +1,370 @@
+{
+  "plan": [
+    [
+      "vllm",
+      "serve",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "--seed",
+      "42",
+      "--port",
+      "8000",
+      "--max-model-len",
+      "4096",
+      "--speculative-config",
+      "{\"model\": \"yuhuili/EAGLE3-LLaMA3.1-Instruct-8B\", \"num_speculative_tokens\": 3, \"method\": \"eagle3\"}"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=1",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_eagle3_c1.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=4",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_eagle3_c4.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=16",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_eagle3_c16.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=32",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_eagle3_c32.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=64",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_eagle3_c64.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "vllm",
+      "serve",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "--seed",
+      "42",
+      "--port",
+      "8000",
+      "--max-model-len",
+      "4096",
+      "--speculative-config",
+      "{\"num_speculative_tokens\": 3, \"method\": \"ngram\", \"prompt_lookup_min\": 2, \"prompt_lookup_max\": 4}"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=1",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_ngram_c1.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=4",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_ngram_c4.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=16",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_ngram_c16.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=32",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_ngram_c32.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=64",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_ngram_c64.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "vllm",
+      "serve",
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "--seed",
+      "42",
+      "--port",
+      "8000",
+      "--max-model-len",
+      "4096"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=1",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_baseline_c1.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=4",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_baseline_c4.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=16",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_baseline_c16.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=32",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_baseline_c32.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ],
+    [
+      "guidellm",
+      "run",
+      "--backend",
+      "kind=openai_http,target=http://localhost:8000,model=meta-llama/Llama-3.1-8B-Instruct,max_tokens=1024,extras.body.temperature=0.0,extras.body.top_p=1.0,extras.body.seed=42",
+      "--profile",
+      "kind=concurrent,streams=64",
+      "--data",
+      "kind=huggingface,source=openai/gsm8k,load_kwargs.name=main,load_kwargs.split=test",
+      "--output",
+      "kind=json,path=results/cloud_bench_raw/guidellm_baseline_c64.json",
+      "--constraint",
+      "kind=max_duration,seconds=60"
+    ]
+  ],
+  "results": {
+    "baseline": {
+      "concurrency": {
+        "1": {
+          "concurrency": 1,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 34.16654282165337,
+          "tpot_p99_ms": 39.558477179948675,
+          "ttft_p99_ms": 1390.775203704834
+        },
+        "4": {
+          "concurrency": 4,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 121.76031853960555,
+          "tpot_p99_ms": 40.327320664615954,
+          "ttft_p99_ms": 1155.2605628967285
+        },
+        "16": {
+          "concurrency": 16,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 441.43795441666344,
+          "tpot_p99_ms": 33.12251948508896,
+          "ttft_p99_ms": 86.64941787719727
+        },
+        "32": {
+          "concurrency": 32,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 828.9693183521679,
+          "tpot_p99_ms": 35.119709552534474,
+          "ttft_p99_ms": 180.05728721618652
+        },
+        "64": {
+          "concurrency": 64,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 1434.2579168723723,
+          "tpot_p99_ms": 42.56787032724541,
+          "ttft_p99_ms": 258.7850093841553
+        }
+      }
+    },
+    "eagle3": {
+      "concurrency": {
+        "1": {
+          "concurrency": 1,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 80.59803064498587,
+          "tpot_p99_ms": 28.265960456789003,
+          "ttft_p99_ms": 1469.139575958252
+        },
+        "4": {
+          "concurrency": 4,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 299.9764258370942,
+          "tpot_p99_ms": 26.717491222150397,
+          "ttft_p99_ms": 1877.3980140686035
+        },
+        "16": {
+          "concurrency": 16,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 1066.6458102620222,
+          "tpot_p99_ms": 17.286755317865417,
+          "ttft_p99_ms": 150.04229545593262
+        },
+        "32": {
+          "concurrency": 32,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 1856.7255991497493,
+          "tpot_p99_ms": 20.13142199455937,
+          "ttft_p99_ms": 218.18089485168457
+        },
+        "64": {
+          "concurrency": 64,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 2333.4895079124594,
+          "tpot_p99_ms": 31.07585388681163,
+          "ttft_p99_ms": 406.6288471221924
+        }
+      }
+    },
+    "ngram": {
+      "concurrency": {
+        "1": {
+          "concurrency": 1,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 51.781715398756674,
+          "tpot_p99_ms": 34.72516148589378,
+          "ttft_p99_ms": 1302.5994300842285
+        },
+        "4": {
+          "concurrency": 4,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 153.35800814972072,
+          "tpot_p99_ms": 30.47420623454642,
+          "ttft_p99_ms": 82.2441577911377
+        },
+        "16": {
+          "concurrency": 16,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 562.6248753253685,
+          "tpot_p99_ms": 31.05462751080913,
+          "ttft_p99_ms": 110.57519912719727
+        },
+        "32": {
+          "concurrency": 32,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 1041.2526880074295,
+          "tpot_p99_ms": 35.4704392158379,
+          "ttft_p99_ms": 186.9516372680664
+        },
+        "64": {
+          "concurrency": 64,
+          "mean_acceptance_rate": null,
+          "mean_output_tokens_per_sec": 1562.4034631412192,
+          "tpot_p99_ms": 47.405735651652016,
+          "ttft_p99_ms": 264.15395736694336
+        }
+      }
+    }
+  }
+}

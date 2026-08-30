@@ -206,7 +206,7 @@
     <div class="grid" id="sysgrid"></div>
     <p style="color:var(--dim);font-size:13px;margin-top:16px">
       Model pair throughout: draft <code>Qwen2.5-0.5B-Instruct</code>,
-      target <code>Qwen2.5-1.5B-Instruct</code>. 221 tests
+      target <code>Qwen2.5-1.5B-Instruct</code>. 251 tests
       (<code>pytest</code>); one result JSON per experiment.</p>
   </section>
 
@@ -225,20 +225,22 @@
         <div class="num"><span>Real int4: wikitext-2 perplexity</span><b>+1.60</b></div>
         <div class="num"><span>4-bit GSM8K drop (self-AWQ / mlx int4)</span><b>&minus;9.5 / &minus;4.0 pt</b></div>
         <div class="num"><span>Output-equivalence oracle mutation score (M-KV class)</span><b>0.00</b></div>
+        <div class="num"><span>Cloud (vLLM/A40) EAGLE3 speedup, c=1 &rarr; c=64</span><b>2.36&times; &rarr; 1.63&times;</b></div>
       </div>
     </div>
   </section>
 
   <section id="cloud">
     <div class="sechead"><div class="kicker">Cloud validation</div>
-      <h2>vLLM / A100 &mdash; production stack, same question</h2></div>
+      <h2>vLLM / A40 &mdash; production stack, same question</h2></div>
     <p class="lead" style="font-size:14px;color:var(--dim);margin-top:-12px">
       A one-time rented-GPU run of the same speculative-decoding question against a
-      production stack: does the same break-even story (α-driven, collapsing at
+      production stack: does the same break-even story (collapsing at
       concurrency) hold on real hardware, or is the Mac-local parity a hardware
-      artifact? Locked config, concurrency sweep, EAGLE3 vs n-gram vs draft-model
-      vs baseline. See engineering note&nbsp;07 once it&rsquo;s written and
-      <code>TASKS.md</code> 支柱7 Bullet&nbsp;2 for status.</p>
+      artifact? Locked config, concurrency sweep, EAGLE3 vs n-gram vs baseline
+      (vLLM 0.10.2's V1 engine doesn't support the draft-model method &mdash;
+      see <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a>
+      坑27). See engineering note&nbsp;09 for the Mac-vs-cloud writeup.</p>
     <div id="cloud-body"></div>
   </section>
 
@@ -253,7 +255,7 @@
 
   <footer>
     <div class="wrap" style="padding:0">
-      Full trap log: <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a> (坑1&ndash;26) &middot;
+      Full trap log: <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a> (坑1&ndash;29) &middot;
       prior art and layout in the <a href="https://github.com/YYukin0/Specter/blob/main/README.md">README</a> &middot;
       runs locally, $0 cloud.
     </div>
@@ -276,6 +278,7 @@ const SYS = [
   ["Fault-injection library + oracle stack O1–O5 + O2","~20 semantic mutation operators, mutation-adequacy matrix","src/spec_faultlib.py"],
   ["Rule-based differential debugger","round bisection → state dump → mechanism classifier","src/specdiff.py"],
   ["Fused Metal kernel + roofline","negative result: 2.6× less memory, ~1.0× speed; mx.compile wins","src/metal_accept_kernel.py"],
+  ["Cloud validation: vLLM + GuideLLM orchestration","real run on a rented A40, EAGLE3 vs n-gram vs baseline","src/cloud_bench/"],
 ];
 const NOTES = [
   ["Testing a speculative decoder: what output-equivalence checks miss",
@@ -302,6 +305,9 @@ const NOTES = [
   ["A fused Metal accept/reject kernel: 2.6× less memory traffic, no speedup",
    "A hand-written kernel for the accept/reject step vs MLX’s op graph: the roofline says memory-bound, but a single-threadgroup kernel can’t saturate bandwidth, and the whole op is ~2% of a target forward. mx.compile already won.",
    "Engineering note 08 · 坑24","08-a-fused-metal-kernel-and-the-roofline.md"],
+  ["Mac vs. rented A40: the same break-even story, at a very different price",
+   "A real vLLM + EAGLE3 run on a rented GPU: 2.36× at concurrency=1 collapsing to 1.63× at concurrency=64 — the same shape this repo’s Mac-local parity result implies from the other end of the curve.",
+   "Engineering note 09 · 坑27–29","09-mac-vs-a40.md"],
 ];
 const REPO_NOTES = "https://github.com/YYukin0/Specter/blob/main/docs/engineering-notes/";
 

@@ -58,8 +58,12 @@ caught it." Listed strongest-first; the file prefixes are build order.
    roofline says memory-bound, but a single-threadgroup kernel can't saturate
    bandwidth, and the whole op is ~2% of a target forward. `mx.compile` already
    won.
+9. [Mac vs. rented A40: the same break-even story, at a very different price](docs/engineering-notes/09-mac-vs-a40.md)
+   — a real vLLM + EAGLE3 run on a rented GPU: 2.36× at concurrency=1
+   collapsing to 1.63× at concurrency=64, the same shape this repo's Mac-local
+   parity result implies from the other end of the curve.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–26), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (坑1–29), the
 build-time ones first.
 
 ---
@@ -128,8 +132,9 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Rule-based differential debugger | `src/specdiff.py` | done |
 | Fused Metal kernel for the accept/reject step + roofline case study | `src/metal_accept_kernel.py`, `src/verify_p6_7_metal_roofline.py` | done — **negative result**: 2.6× less memory traffic, ~1.0× the speed; `mx.compile` wins |
 | Demo: self-contained lab page replaying a recorded real run (+ optional live stdlib HTTP/SSE backend) | `docs/site/index.html`, `src/serve_http.py` | done — open the HTML |
+| Cloud validation: vLLM + GuideLLM benchmark orchestration (subprocess-driven, hermetic-tested locally, executed for real on a rented GPU) | `src/cloud_bench/` | done — real run on a rented A40, `results/bullet2_vllm_eagle3.json` |
 
-221 tests (`pytest`). Result JSONs for every experiment in `results/`.
+251 tests (`pytest`). Result JSONs for every experiment in `results/`.
 
 ---
 
@@ -175,6 +180,26 @@ On this 0.5B/1.5B pair, on this Mac — not universal claims:
   fake one. Cache and position bugs are killed only by O4's structural
   invariants. Output-equivalence checks, at any model fidelity, are the weakest
   test in the stack.
+
+---
+
+## Cloud validation: vLLM / A40, real EAGLE3, real concurrency
+
+Off this Mac, once: a rented GPU, vLLM 0.10.2's own speculative-decoding
+support, a real trained EAGLE3 head on `Llama-3.1-8B-Instruct`, `guidellm`
+driving load, full GSM8K. Not a universal speedup claim either — the same
+collapse-at-concurrency shape this repo's Mac-local parity result implies
+from the other end of the curve:
+
+| concurrency | 1 | 4 | 16 | 32 | 64 |
+|---|---|---|---|---|---|
+| EAGLE3 speedup | **2.36×** | 2.46× | 2.42× | 2.24× | **1.63×** |
+| n-gram speedup | 1.52× | 1.26× | 1.28× | 1.26× | 1.09× |
+
+Full writeup, caveats, and why this isn't in tension with the Mac's parity
+result: [note 09](docs/engineering-notes/09-mac-vs-a40.md). Raw data:
+[`results/bullet2_vllm_eagle3.json`](results/bullet2_vllm_eagle3.json),
+[`results/cloud_bench_raw/`](results/cloud_bench_raw/).
 
 ---
 
@@ -230,11 +255,12 @@ python -m demo.live --compare            # or: python -m demo.live --fake   (no 
 ```
 src/            implementation + one verify_*.py driver per experiment
                 serve_http.py — the demo server (stdlib http.server + SSE)
-tests/          221 pytest tests (hermetic + model-gated)
+                cloud_bench/ — vLLM/GuideLLM orchestration for the rented-GPU run
+tests/          251 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
-  engineering-notes/   the 8 stories above
-  pitfalls.md          坑1–26
+  engineering-notes/   the 9 stories above
+  pitfalls.md          坑1–29
   site/                self-contained lab page + the recorded run it replays
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)

@@ -9,7 +9,103 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (坑13–26; 坑13–21 on 2026-08-28, 坑22–26 on 2026-08-29)
+## Found while building (坑13–29; 坑13–21 on 2026-08-28, 坑22–26 on 2026-08-29, 坑27–29 on 2026-08-30)
+
+### 坑29 — vLLM's V1 engine flatly refuses draft-model speculative decoding
+**Where:** Bullet 2 (支柱7), full arm × concurrency matrix on the rented A40.
+
+The plan's fourth arm, `draft_model` (a small same-family model as the draft
+instead of a lookahead/eagle head), crashed the `vllm serve` process before it
+ever answered `/health`: `NotImplementedError: Speculative decoding with
+draft model is not supported yet. Please consider using other speculative
+decoding methods such as ngram, medusa, eagle, or deepseek_mtp.` — raised
+from `_is_v1_supported_oracle` in `vllm.engine.arg_utils`, on the very first
+line of engine construction. Not a config mistake to fix: `vllm==0.10.2`'s V1
+engine (the only engine, V0 was removed 2025-11-12) simply doesn't implement
+this method yet.
+
+**Compounding bug:** `orchestrate.run_matrix`'s default arm list fell back to
+`[s.name for s in config.arm_specs()]` — all 4 arms including `draft_model` —
+rather than the curated `config.ARM_NAMES`. That's exactly what let the
+unsupported arm into a real run: `orchestrate.py --execute` with no `--arms`
+flag ran it by default. The crash left `vllm serve` dead and the orchestrator
+stuck in `wait_for_health`'s 5-minute timeout, waiting on a server that would
+never come up — had to `kill -9` it manually rather than wait it out.
+
+**Fix:** `config.ARM_NAMES` now excludes `draft_model` (3 arms:
+eagle3/ngram/baseline); `arm_specs()`/`arm_spec_by_name()` still define it for
+the record. `run_matrix`'s default reads `ARM_NAMES`, not `arm_specs()`.
+
+**Lesson:** a "supported speculative-decoding methods" list buried in a
+`NotImplementedError` string is easy to miss until you actually try to start
+the server — `vllm serve --help` doesn't enumerate per-method support, only
+the `--speculative-config` schema shape. Test the arm that isn't in the
+method's own advertised list before building a matrix around it.
+
+---
+
+### 坑28 — a placeholder GuideLLM output schema guess never matched, silently
+**Where:** Bullet 2 (支柱7), `orchestrate.normalize_guidellm_result`.
+
+Written before any real `guidellm run` output existed, this function dug for
+fields at `raw["metrics"]["output_tokens_per_second"]["mean"]` with a flat-shape
+fallback. Neither path exists in the real `guidellm==0.7.3` output: the true
+shape is `raw = {"metadata", "config", "benchmarks": [...]}`, and each
+`benchmarks[0]["metrics"][<name>]` is a per-completion-status breakdown
+(`{"successful": {...distribution stats...}, "errored": {...}, ...}`). The
+first real sanity-check run completed cleanly end-to-end — server up,
+GuideLLM ran, JSON written — and `normalize_guidellm_result` returned every
+field as `null` without raising anything. `compute_speedup` would have divided
+by `None`, not by zero; the bug was caught by eyeballing the checkpoint JSON,
+not by a crash.
+
+**Second layer of the same bug:** even after pointing at
+`benchmarks[0]["metrics"][name]["successful"]`, the percentile fields
+(`ttft_p99_ms`, `tpot_p99_ms`) still came back `null` — `p99` lives one level
+deeper, under `successful["percentiles"]["p99"]`, not as a top-level key on
+the stats object itself alongside `mean`/`median`/`min`/`max`.
+
+**Fix:** rewrote the function against the real output JSON on the rented box
+(`results/cloud_bench_raw/guidellm_baseline_c1.json`), with a `stat()` helper
+that routes percentile-shaped names (`p99`, `p50`, ...) through the nested
+`percentiles` dict and everything else (`mean`, `median`, ...) as a direct key.
+
+**Lesson:** a schema-mapping function with no real example to check against
+degrades silently to all-`None` rather than erroring — there's no `KeyError`
+to catch when every `.get()` has a default. The only way to know it's wrong is
+to look at what it actually produced, once, against real data.
+
+---
+
+### 坑27 — GuideLLM has no default stopping point against a real dataset
+**Where:** Bullet 2 (支柱7), `orchestrate.guidellm_cmd`.
+
+The first real sanity-check run — `baseline` arm, concurrency=1, against the
+full 1319-row GSM8K test split — was still running 8+ minutes in with no end
+in sight: ~34 tok/s generation, up to 1024 output tokens per request,
+concurrency 1 means fully sequential requests. `guidellm run` has no implicit
+request-count or time cap; left alone it walks the entire dataset, which at
+this rate would have taken on the order of hours for one arm × concurrency
+point out of 15. Had to kill the run and a leftover `VLLM::EngineCore` process
+(still holding 41 GB of GPU memory after the parent `vllm serve` was killed)
+by PID to actually free the GPU.
+
+**Fix:** `--constraint kind=max_duration,seconds=60` (field name
+`MaxDurationConstraintArgs.seconds`, found by importing
+`guidellm.scheduler.constraints` directly and reading the pydantic model,
+cross-checked against `guidellm run --help`'s `--constraint kind=[max_errors|
+max_error_rate|max_global_error_rate|max_duration|max_requests|
+over_saturation],...`) bounds every arm × concurrency point to the same
+wall-clock budget instead of a request count — matches the 60s/point figure
+the execution plan had written down before any of this was verified.
+
+**Lesson:** a benchmarking tool measuring "requests per second" doesn't
+imply it will ever decide it has *enough* requests — check for a stopping
+condition before launching against a real (as opposed to a handful of
+synthetic) dataset, on a fixed-cost rented resource, at concurrency=1 where
+each request is fully serial.
+
+---
 
 ### 坑18 — the partial-acceptance rollback formula in the plan was wrong
 **Where:** P6.0, single-sequence KV-cache speculative decoding (`src/spec_kv.py`).
