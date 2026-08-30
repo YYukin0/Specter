@@ -7,12 +7,16 @@ unit-tested on a machine (this one) that has neither installed and no CUDA
 GPU. `subprocess.Popen`/`subprocess.run`/the health-check clock are all
 injectable parameters for exactly that reason -- see tests/test_cloud_bench.py.
 
-The GuideLLM CLI has two syntax generations in the wild (flag-based
-`guidellm benchmark --target ... --rate-type ...` vs newer
-`guidellm run --backend kind=...`); `guidellm_cmd` below targets the
-flag-based form documented as of 2026-08. Reconcile it against
-`guidellm --help` / `guidellm benchmark --help` on the rented box BEFORE
-running the full matrix -- see notes/cloud-bullet2-execution-plan_2026-08-29.md.
+GuideLLM had two CLI syntax generations in the wild; the version actually
+installed on the rented box (guidellm==0.7.3, 2026-08-30) only ships the
+newer registry-style one -- `guidellm benchmark` does not exist as a
+subcommand at all (`guidellm --help` lists only env/export/mock-server/
+preprocess/run). `guidellm_cmd` below was reconciled against
+`guidellm run --help` plus reading the installed package's pydantic field
+definitions directly (backends/openai/http.py, data/deserializers/
+huggingface.py, scheduler/strategies.py, benchmark/outputs/serialized.py) on
+the actual rented A40 -- see notes/cloud-bullet2-execution-plan_2026-08-29.md
+for the verification trail.
 """
 from __future__ import annotations
 
@@ -51,22 +55,37 @@ def guidellm_cmd(
     target_url: str | None = None,
     model: str = config.TARGET_MODEL,
 ) -> list[str]:
+    """guidellm==0.7.3 registry-style CLI. Each `--backend`/`--profile`/`--data`/
+    `--output` value is `kind=<type>,key=value,...`; dotted keys (e.g.
+    `extras.body.temperature`) build nested dicts (verified via
+    `guidellm.utils.arg_string.loads` on the rented box). `max_tokens` sits on
+    the backend itself (`OpenAIHTTPBackendArgs.max_tokens`, aliased to
+    `max_completion_tokens`) rather than the data source -- the `huggingface`
+    data source (unlike `synthetic_text`) has no output-length knob of its
+    own, so this is the only place OUTPUT_LEN gets enforced for a real
+    dataset. temperature/top_p/seed ride along in `extras.body`, which is
+    merged into the outgoing OpenAI-style request body."""
     target_url = target_url or f"http://localhost:{config.VLLM_PORT}"
-    data_spec = (
-        f"dataset={config.DATASET}"
-        f",output_tokens={config.OUTPUT_LEN}"
-        f",temperature={config.TEMPERATURE}"
-        f",top_p={config.TOP_P}"
-        f",seed={config.SEED}"
+    backend = (
+        f"kind=openai_http,target={target_url},model={model}"
+        f",max_tokens={config.OUTPUT_LEN}"
+        f",extras.body.temperature={config.TEMPERATURE}"
+        f",extras.body.top_p={config.TOP_P}"
+        f",extras.body.seed={config.SEED}"
     )
+    profile = f"kind=concurrent,streams={concurrency}"
+    data = (
+        f"kind=huggingface,source={config.DATASET}"
+        f",load_kwargs.name={config.DATASET_CONFIG}"
+        f",load_kwargs.split={config.DATASET_SPLIT}"
+    )
+    output = f"kind=json,path={output_path}"
     return [
-        "guidellm", "benchmark",
-        "--target", target_url,
-        "--model", model,
-        "--rate-type", "concurrent",
-        "--rate", str(concurrency),
-        "--data", data_spec,
-        "--output-path", str(output_path),
+        "guidellm", "run",
+        "--backend", backend,
+        "--profile", profile,
+        "--data", data,
+        "--output", output,
     ]
 
 

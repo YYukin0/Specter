@@ -62,15 +62,30 @@ def test_vllm_serve_cmd_caps_max_model_len():
 # ----------------------------------------------------------------- guidellm_cmd
 
 def test_guidellm_cmd_uses_requested_concurrency_and_locked_config(tmp_path):
+    # guidellm==0.7.3 (verified live on the rented A40, 2026-08-30): no
+    # `guidellm benchmark` subcommand exists, only `guidellm run` with
+    # registry-style `kind=...,key=value` options. See orchestrate.py's
+    # guidellm_cmd docstring for the field-by-field trail.
     out = tmp_path / "r.json"
     cmd = orchestrate.guidellm_cmd(16, out)
-    assert cmd[cmd.index("--rate-type") + 1] == "concurrent"
-    assert cmd[cmd.index("--rate") + 1] == "16"
-    assert cmd[cmd.index("--output-path") + 1] == str(out)
+    assert cmd[0:2] == ["guidellm", "run"]
+    profile = cmd[cmd.index("--profile") + 1]
+    assert "kind=concurrent" in profile
+    assert "streams=16" in profile
+    backend = cmd[cmd.index("--backend") + 1]
+    assert "kind=openai_http" in backend
+    assert f"max_tokens={config.OUTPUT_LEN}" in backend
+    assert f"extras.body.temperature={config.TEMPERATURE}" in backend
+    assert f"extras.body.top_p={config.TOP_P}" in backend
+    assert f"extras.body.seed={config.SEED}" in backend
     data = cmd[cmd.index("--data") + 1]
-    assert f"output_tokens={config.OUTPUT_LEN}" in data
-    assert f"temperature={config.TEMPERATURE}" in data
-    assert f"seed={config.SEED}" in data
+    assert "kind=huggingface" in data
+    assert f"source={config.DATASET}" in data
+    assert f"load_kwargs.name={config.DATASET_CONFIG}" in data
+    assert f"load_kwargs.split={config.DATASET_SPLIT}" in data
+    output = cmd[cmd.index("--output") + 1]
+    assert "kind=json" in output
+    assert f"path={out}" in output
 
 
 # --------------------------------------------------------------- wait_for_health
@@ -180,7 +195,7 @@ def test_run_matrix_executes_and_collects_results(tmp_path, monkeypatch):
         return FakeProc()
 
     def fake_run(cmd, check=True):
-        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps({"output_tokens_per_second": 50.0}))
 
@@ -216,7 +231,7 @@ def test_run_matrix_resumes_from_existing_raw_output(tmp_path, monkeypatch):
         def wait(self, timeout=None): pass
 
     def fake_run(cmd, check=True):
-        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         calls.append(out_path.name)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps({"output_tokens_per_second": 99.0}))
@@ -256,7 +271,7 @@ def test_run_matrix_rereuns_point_with_corrupt_cached_file(tmp_path, monkeypatch
         def wait(self, timeout=None): pass
 
     def fake_run(cmd, check=True):
-        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         out_path.write_text(json.dumps({"output_tokens_per_second": 77.0}))
 
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
@@ -277,7 +292,7 @@ def test_run_matrix_checkpoints_aggregated_results_after_each_point(tmp_path, mo
         def wait(self, timeout=None): pass
 
     def fake_run(cmd, check=True):
-        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        out_path = Path(cmd[cmd.index("--output") + 1].removeprefix("kind=json,path="))
         if out_path.name == "guidellm_baseline_c4.json":
             # by the time the second point runs, the checkpoint from the
             # first point must already be on disk

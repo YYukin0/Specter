@@ -33,7 +33,15 @@ SEED = 42
 # GSM8K prompts + our OUTPUT_LEN are both short; capping this avoids either an
 # OOM or a much slower server startup on a single A100/H100 for no benefit.
 MAX_MODEL_LEN = 4096
-DATASET = "gsm8k"  # full 1319-example test split -- 坑2, task-domain match matters
+# "gsm8k" bare id 404s as of 2026-08 -- HF Hub now requires namespace/name.
+# Verified live on the rented box: load_dataset("openai/gsm8k", "main",
+# split="test") -> 1319 rows, columns ["question", "answer"]. "question" is
+# already in GuideLLM's default text_column alias list (data/preprocessors/
+# mappers.py), so no --data-column-mapper override is needed -- "answer" is
+# simply unused (GuideLLM measures serving perf, not task accuracy).
+DATASET = "openai/gsm8k"  # full 1319-example test split -- 坑2, task-domain match matters
+DATASET_CONFIG = "main"
+DATASET_SPLIT = "test"
 CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
 ARM_NAMES = ("eagle3", "ngram", "draft_model", "baseline")
 
