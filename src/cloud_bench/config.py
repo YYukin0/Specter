@@ -45,6 +45,14 @@ DATASET_SPLIT = "test"
 CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
 ARM_NAMES = ("eagle3", "ngram", "draft_model", "baseline")
 
+# 坑25: guidellm run has NO default stopping point against a real (non-infinite)
+# dataset -- a concurrency=1 baseline run against full GSM8K (1319 rows) was
+# observed still running 8+ minutes in on the rented A40 before this was
+# added. Each arm x concurrency point gets this many wall-clock seconds
+# (via --constraint kind=max_duration,seconds=...), not a request count, so
+# every point measures a comparable time-bounded window.
+GUIDELLM_MAX_DURATION_S = 60
+
 VLLM_PORT = 8000
 HEALTH_TIMEOUT_S = 300
 HEALTH_POLL_INTERVAL_S = 5

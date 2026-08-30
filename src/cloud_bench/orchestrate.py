@@ -56,15 +56,25 @@ def guidellm_cmd(
     model: str = config.TARGET_MODEL,
 ) -> list[str]:
     """guidellm==0.7.3 registry-style CLI. Each `--backend`/`--profile`/`--data`/
-    `--output` value is `kind=<type>,key=value,...`; dotted keys (e.g.
-    `extras.body.temperature`) build nested dicts (verified via
+    `--output`/`--constraint` value is `kind=<type>,key=value,...`; dotted
+    keys (e.g. `extras.body.temperature`) build nested dicts (verified via
     `guidellm.utils.arg_string.loads` on the rented box). `max_tokens` sits on
     the backend itself (`OpenAIHTTPBackendArgs.max_tokens`, aliased to
     `max_completion_tokens`) rather than the data source -- the `huggingface`
     data source (unlike `synthetic_text`) has no output-length knob of its
     own, so this is the only place OUTPUT_LEN gets enforced for a real
     dataset. temperature/top_p/seed ride along in `extras.body`, which is
-    merged into the outgoing OpenAI-style request body."""
+    merged into the outgoing OpenAI-style request body.
+
+    Without an explicit `--constraint`, `guidellm run` has no default cap and
+    will walk the full 1319-row GSM8K test split -- discovered live on the
+    rented A40 when a concurrency=1 baseline run was still going 8+ minutes
+    in (~34 tok/s generation, 1024 max output tokens => hours to exhaust the
+    split). `MaxDurationConstraintArgs.seconds` (guidellm.scheduler.
+    constraints, cross-checked against `guidellm run --help`'s `--constraint
+    kind=max_duration,...`) bounds each arm x concurrency point to a fixed
+    wall-clock budget instead -- 坑25, matches the 60s/point figure the
+    execution plan called out before any of this was verified."""
     target_url = target_url or f"http://localhost:{config.VLLM_PORT}"
     backend = (
         f"kind=openai_http,target={target_url},model={model}"
@@ -80,12 +90,14 @@ def guidellm_cmd(
         f",load_kwargs.split={config.DATASET_SPLIT}"
     )
     output = f"kind=json,path={output_path}"
+    constraint = f"kind=max_duration,seconds={config.GUIDELLM_MAX_DURATION_S}"
     return [
         "guidellm", "run",
         "--backend", backend,
         "--profile", profile,
         "--data", data,
         "--output", output,
+        "--constraint", constraint,
     ]
 
 

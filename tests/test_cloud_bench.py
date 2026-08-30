@@ -86,6 +86,9 @@ def test_guidellm_cmd_uses_requested_concurrency_and_locked_config(tmp_path):
     output = cmd[cmd.index("--output") + 1]
     assert "kind=json" in output
     assert f"path={out}" in output
+    constraint = cmd[cmd.index("--constraint") + 1]
+    assert "kind=max_duration" in constraint
+    assert f"seconds={config.GUIDELLM_MAX_DURATION_S}" in constraint
 
 
 # --------------------------------------------------------------- wait_for_health
