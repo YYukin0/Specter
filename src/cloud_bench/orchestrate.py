@@ -133,18 +133,25 @@ def normalize_guidellm_result(raw: dict, concurrency: int) -> dict:
     `raw = {"metadata", "config", "benchmarks": [...]}`; each
     `benchmarks[i]["metrics"][<metric_name>]` is a per-completion-status
     breakdown (`{"successful": <stats>, "errored": <stats>, ...}`), and each
-    `<stats>` is a full distribution object (`mean`, `median`, `percentiles`
-    with keys like `p99`, etc.). GuideLLM measures serving performance only
-    -- there is no acceptance-rate metric in its schema at all, so that
-    field is always None here (vLLM's own `/metrics` Prometheus endpoint
-    would be the place to get it, not guidellm)."""
+    `<stats>` is a full distribution object (`mean`, `median`, `min`, `max`,
+    `count`, ... and a nested `percentiles` dict for `p99` etc. -- p99 is
+    NOT a top-level key on the stats object itself, an earlier version of
+    this function got that wrong and silently returned None for every
+    percentile field). GuideLLM measures serving performance only -- there
+    is no acceptance-rate metric in its schema at all, so that field is
+    always None here (vLLM's own `/metrics` Prometheus endpoint would be the
+    place to get it, not guidellm)."""
     benchmarks = raw.get("benchmarks") or [{}]
     metrics = benchmarks[0].get("metrics", {}) if benchmarks else {}
 
     def stat(metric_name: str, stat_name: str = "mean"):
         bucket = metrics.get(metric_name, {})
         successful = bucket.get("successful") if isinstance(bucket, dict) else None
-        return successful.get(stat_name) if isinstance(successful, dict) else None
+        if not isinstance(successful, dict):
+            return None
+        if stat_name.startswith("p") and stat_name[1:].isdigit():
+            return successful.get("percentiles", {}).get(stat_name)
+        return successful.get(stat_name)
 
     return {
         "concurrency": concurrency,

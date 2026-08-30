@@ -149,8 +149,8 @@ def test_normalize_guidellm_result_reads_real_schema():
             {
                 "metrics": {
                     "output_tokens_per_second": {"successful": {"mean": 42.0}},
-                    "time_to_first_token_ms": {"successful": {"p99": 123.0}},
-                    "time_per_output_token_ms": {"successful": {"p99": 7.0}},
+                    "time_to_first_token_ms": {"successful": {"percentiles": {"p99": 123.0}}},
+                    "time_per_output_token_ms": {"successful": {"percentiles": {"p99": 7.0}}},
                 }
             }
         ]
