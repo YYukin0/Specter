@@ -29,8 +29,13 @@ def _fake_guidellm_json(output_tokens_per_sec: float) -> str:
 # --------------------------------------------------------------------- config
 
 def test_arm_specs_cover_expected_names():
+    # 坑27: arm_specs() still defines "draft_model" for the record, but it's
+    # deliberately excluded from ARM_NAMES (the default run set) -- vllm==
+    # 0.10.2's V1 engine rejects that method outright at server startup.
     names = [s.name for s in config.arm_specs()]
-    assert names == list(config.ARM_NAMES)
+    assert set(config.ARM_NAMES) <= set(names)
+    assert "draft_model" not in config.ARM_NAMES
+    assert "draft_model" in names
 
 
 def test_arm_spec_by_name_roundtrips_and_rejects_unknown():
@@ -194,6 +199,19 @@ def test_compute_speedup_raises_on_zero_baseline_throughput():
 
 
 # --------------------------------------------------------------------- run_matrix
+
+def test_run_matrix_defaults_to_arm_names_not_all_arm_specs():
+    # 坑27 regression: the default must exclude "draft_model" (vllm==0.10.2's
+    # V1 engine rejects it at server startup), not fall back to
+    # arm_specs() (4 arms, including draft_model).
+    matrix = orchestrate.run_matrix(
+        concurrencies=[1], dry_run=True,
+        popen=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no subprocess in dry_run")),
+        run=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no subprocess in dry_run")),
+    )
+    assert set(matrix["results"].keys()) == set(config.ARM_NAMES)
+    assert "draft_model" not in matrix["results"]
+
 
 def test_run_matrix_dry_run_builds_full_plan_without_subprocess():
     def boom(*a, **k):

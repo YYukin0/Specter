@@ -43,7 +43,16 @@ DATASET = "openai/gsm8k"  # full 1319-example test split -- 坑2, task-domain ma
 DATASET_CONFIG = "main"
 DATASET_SPLIT = "test"
 CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
-ARM_NAMES = ("eagle3", "ngram", "draft_model", "baseline")
+# 坑27: "draft_model" is excluded from the default run -- vllm==0.10.2's V1
+# engine oracle rejects it outright at server startup: `NotImplementedError:
+# Speculative decoding with draft model is not supported yet. Please
+# consider using other speculative decoding methods such as ngram, medusa,
+# eagle, or deepseek_mtp.` (hit live on the rented A40, mid-matrix, 2026-08-30
+# -- the vllm serve process for this arm crashed before ever answering
+# /health). Not a config mistake to fix -- this vllm version simply doesn't
+# support the arm. arm_specs()/arm_spec_by_name() still define it for the
+# record; it's just not in the set orchestrate.run_matrix() runs by default.
+ARM_NAMES = ("eagle3", "ngram", "baseline")
 
 # 坑25: guidellm run has NO default stopping point against a real (non-infinite)
 # dataset -- a concurrency=1 baseline run against full GSM8K (1319 rows) was

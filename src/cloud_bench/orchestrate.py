@@ -201,7 +201,14 @@ def run_matrix(
     is rewritten to that path after every point completes, so a process that
     dies mid-run (dropped SSH, preempted instance) loses at most the point it
     was on -- rerunning the same command picks up where it left off."""
-    arms = arms or [s.name for s in config.arm_specs()]
+    # config.ARM_NAMES, not [s.name for s in config.arm_specs()] -- the
+    # latter includes "draft_model", which arm_specs() still defines for the
+    # record but which vllm==0.10.2's V1 engine outright rejects at server
+    # startup (坑27). Defaulting to arm_specs() here is exactly what let
+    # draft_model into a real matrix run and killed the orchestrator mid-run
+    # on the rented A40 (2026-08-30) waiting on a /health that would never
+    # come.
+    arms = arms or list(config.ARM_NAMES)
     concurrencies = concurrencies or list(config.CONCURRENCIES)
     deadline = now() + max_runtime_min * 60
 
