@@ -89,9 +89,16 @@
   .strip{display:flex;align-items:flex-end;gap:1px;height:44px;
     background:var(--panel2);border:1px solid var(--line);padding:3px}
   .strip i{flex:1 1 0;min-width:0;background:var(--dim);opacity:.9;transition:height .12s}
-  .strip i.pass-break{margin-left:5px;box-shadow:-3px 0 0 var(--line)}
   .sparkwrap{position:relative;margin-top:4px}
-  #spark{width:100%;height:70px;display:block;background:var(--panel2);border:1px solid var(--line)}
+  .sparkwrap canvas{width:100%;height:70px;display:block;background:var(--panel2);border:1px solid var(--line)}
+
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:2px}
+  @media(max-width:720px){.lanes{grid-template-columns:1fr}}
+  .lane .telem{grid-template-columns:repeat(3,1fr)}
+  .lanehead{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 8px}
+  .lanehead h4{margin:0;font:600 12px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase}
+  .lanehead h4.spec-lane{color:var(--good)} .lanehead h4.base-lane{color:var(--bad)}
+  .lanehead span{font-family:var(--mono);font-size:11px;color:var(--dim)}
 
   .breaker{color:var(--dim);font-family:var(--mono);font-size:11.5px;margin:8px 0 0}
   .stream{margin-top:18px;display:grid;gap:8px}
@@ -153,8 +160,10 @@
     <p class="lead" style="font-size:14px;color:var(--dim);margin-top:-12px">
       The serving loop (<code>src/serving_loop.py</code>) on the Qwen2.5 0.5B / 1.5B
       pair — four prompts, continuous batching — captured token by token on an
-      M-series Mac and replayed here frame for frame, then a second pass with
-      speculation off. Nothing runs in this page; it&rsquo;s a recording.
+      M-series Mac and replayed here frame for frame: speculative and baseline
+      side by side, at the same time, so you can watch which one actually
+      finishes first instead of reading it off a table. Nothing runs in this
+      page; it&rsquo;s a recording.
       <span id="live-hint" hidden>&nbsp;A local backend is answering —
       <a href="#livebox" id="live-jump">run your own prompt&nbsp;&darr;</a></span></p>
 
@@ -170,29 +179,15 @@
           <button data-sp="2">2&times;</button>
           <button data-sp="4">4&times;</button>
         </span>
-        <span class="prog" id="prog"></span>
-      </div>
-
-      <div class="telem">
-        <div><k>round</k><v id="v-round">&mdash;</v></div>
-        <div><k>mode</k><v id="v-mode">&mdash;</v></div>
-        <div><k>&gamma;</k><v id="v-gamma">&mdash;</v></div>
-        <div><k>&alpha; rolling</k><v id="v-alpha">&mdash;</v></div>
-        <div><k>tok/s</k><v id="v-tps">&mdash;</v></div>
-        <div><k>active / queued</k><v id="v-aq">&mdash;</v></div>
       </div>
 
       <div class="striplab"><span>per round &middot; colour = mode &middot; height = tokens / sequence</span>
-        <span id="strip-legend">spec &nbsp;<b style="color:var(--good)">&#9632;</b>&nbsp;&nbsp;
-          baseline &nbsp;<b style="color:var(--bad)">&#9632;</b></span></div>
-      <div class="strip" id="strip"></div>
+        <span>spec &nbsp;<b style="color:var(--good)">&#9632;</b>&nbsp;&nbsp;
+          degraded &nbsp;<b style="color:var(--bad)">&#9632;</b>&nbsp;&nbsp;
+          probe &nbsp;<b style="color:var(--probe)">&#9632;</b></span></div>
 
-      <div class="sparklab"><span>throughput (tok/s)</span><span id="sparklab">&mdash;</span></div>
-      <div class="sparkwrap"><canvas id="spark"></canvas></div>
+      <div class="lanes" id="lanes"></div>
 
-      <p class="breaker" id="v-breaker">breaker: &mdash;</p>
-
-      <div class="stream" id="stream"></div>
       <div id="result"></div>
     </div>
 
@@ -449,105 +444,147 @@ async function loadRuns(){
 }
 
 const MODE_COLOR = {spec:"var(--good)",degraded:"var(--bad)",probe:"var(--probe)",idle:"var(--dim)"};
-const spark = $("spark"), sctx = spark.getContext("2d");
 
-function drawSpark(series){
+// Every recorded (and live) run is two independent full generations of the
+// same prompts -- pass "A" with speculation on, pass "B" with it off -- that
+// used to be concatenated into one timeline and replayed back to back. That
+// made every scenario *look* like a single run whose mode flipped partway,
+// indistinguishable from "Breaker trips", where the mode genuinely does
+// change mid-run. Two lanes, played concurrently, keep those honest: A's own
+// internal mode changes (real, for the breaker scenario) stay visible inside
+// lane A, while B is always just a flat concurrent control -- and you can see
+// which one actually finishes first instead of reading it off a table.
+const laneOf = pass => pass.toLowerCase();
+
+function laneHTML(pass, title, cls){
+  const lane = laneOf(pass);
+  return `<div class="lane">
+    <div class="lanehead"><h4 class="${cls}">${title}</h4><span id="prog-${lane}">&mdash;</span></div>
+    <div class="telem">
+      <div><k>round</k><v id="v-round-${lane}">&mdash;</v></div>
+      <div><k>mode</k><v id="v-mode-${lane}">&mdash;</v></div>
+      <div><k>&gamma;</k><v id="v-gamma-${lane}">&mdash;</v></div>
+      <div><k>&alpha; rolling</k><v id="v-alpha-${lane}">&mdash;</v></div>
+      <div><k>tok/s</k><v id="v-tps-${lane}">&mdash;</v></div>
+      <div><k>active / queued</k><v id="v-aq-${lane}">&mdash;</v></div>
+    </div>
+    <div class="strip" id="strip-${lane}"></div>
+    <div class="sparklab"><span>tok/s</span><span id="sparklab-${lane}">&mdash;</span></div>
+    <div class="sparkwrap"><canvas id="spark-${lane}"></canvas></div>
+    <p class="breaker" id="v-breaker-${lane}">&mdash;</p>
+    <div class="stream" id="stream-${lane}"></div>
+  </div>`;
+}
+$("lanes").innerHTML = laneHTML("A", "Speculative", "spec-lane") + laneHTML("B", "Baseline", "base-lane");
+
+const SPARK = {};
+["a","b"].forEach(lane=>{ const el = $("spark-"+lane); SPARK[lane] = {el, ctx: el.getContext("2d")}; });
+
+function drawSpark(series, lane){
+  const {el, ctx} = SPARK[lane];
   const dpr = window.devicePixelRatio || 1;
-  const w = spark.clientWidth, h = 70;
-  spark.width = w*dpr; spark.height = h*dpr; sctx.setTransform(dpr,0,0,dpr,0,0);
-  sctx.clearRect(0,0,w,h);
+  const w = el.clientWidth, h = 70;
+  el.width = w*dpr; el.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
   if(series.length < 2) return;
   const mx = Math.max(...series)*1.12 || 1;
-  // faint baseline at the run's final aggregate, if known
-  sctx.strokeStyle = "#a3c08d"; sctx.lineWidth = 1.6;
-  sctx.beginPath();
+  ctx.strokeStyle = "#a3c08d"; ctx.lineWidth = 1.6;
+  ctx.beginPath();
   series.forEach((v,i)=>{ const x = i/(series.length-1)*w, y = h - (v/mx)*(h-8) - 4;
-    i ? sctx.lineTo(x,y) : sctx.moveTo(x,y); });
-  sctx.stroke();
-  sctx.fillStyle = "rgba(163,192,141,.12)";
-  sctx.lineTo(w,h); sctx.lineTo(0,h); sctx.closePath(); sctx.fill();
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); });
+  ctx.stroke();
+  ctx.fillStyle = "rgba(163,192,141,.12)";
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
 }
 
 function setTelem(d){
-  $("v-round").textContent = d.index;
-  // the B pass runs the same loop with speculation off; the loop reports that
-  // internally as "degraded" -- show it as "baseline" so it doesn't read as a fault
-  const shown = d.pass === "B" ? "baseline" : d.mode;
-  const m = $("v-mode"); m.textContent = shown; m.className = "mode-" + d.mode;
-  $("v-gamma").textContent = d.gamma || "—";
-  $("v-alpha").textContent = (d.rolling_alpha ?? 0).toFixed(2);
-  $("v-tps").textContent = (d.tok_per_s ?? 0).toFixed(1);
-  $("v-aq").textContent = d.n_active + " / " + d.n_queued;
-  $("v-breaker").textContent = d.pass === "B"
-    ? "baseline pass — speculation off"
-    : "breaker: " + (d.breaker || "—");
+  const lane = laneOf(d.pass);
+  $("v-round-"+lane).textContent = d.index;
+  // pass B is the same loop with speculation permanently off -- gamma/rolling
+  // alpha aren't meaningful without speculation, so blank them instead of
+  // showing a leftover config value
+  const shown = d.pass === "B" ? "off" : d.mode;
+  const m = $("v-mode-"+lane); m.textContent = shown; m.className = "mode-" + d.mode;
+  $("v-gamma-"+lane).textContent = d.pass === "B" ? "—" : (d.gamma || "—");
+  $("v-alpha-"+lane).textContent = d.pass === "B" ? "—" : (d.rolling_alpha ?? 0).toFixed(2);
+  $("v-tps-"+lane).textContent = (d.tok_per_s ?? 0).toFixed(1);
+  $("v-aq-"+lane).textContent = d.n_active + " / " + d.n_queued;
+  $("v-breaker-"+lane).textContent = d.pass === "B"
+    ? "speculation off" : "breaker: " + (d.breaker || "—");
 }
 
-let lastPass = null;
 function pushStrip(d){
+  const lane = laneOf(d.pass);
   const perSeq = d.emitted / Math.max(d.n_active, 1);
   const bar = document.createElement("i");
   bar.style.height = Math.max(8, Math.min(100, perSeq / 5 * 100)) + "%";
   bar.style.background = MODE_COLOR[d.mode] || "var(--dim)";
-  if(lastPass !== null && d.pass !== lastPass) bar.className = "pass-break";
-  lastPass = d.pass;
-  $("strip").appendChild(bar);
+  $("strip-"+lane).appendChild(bar);
 }
 
 const cards = {};
 function ensureCards(prompts){
-  $("stream").innerHTML = ""; for(const k in cards) delete cards[k];
+  $("stream-a").innerHTML = ""; $("stream-b").innerHTML = ""; for(const k in cards) delete cards[k];
   (prompts||[]).forEach((p,i)=>{
-    const el = document.createElement("div"); el.className = "s";
-    el.innerHTML = `<k>${p.replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]))}</k><p></p>`;
-    $("stream").appendChild(el);
-    cards["A"+i] = el;
+    const label = p.replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+    ["A","B"].forEach(tag=>{
+      const el = document.createElement("div"); el.className = "s";
+      el.innerHTML = `<k>${label}</k><p></p>`;
+      $("stream-"+laneOf(tag)).appendChild(el);
+      cards[tag+i] = el;
+    });
   });
 }
 function setStream(texts){
   for(const [rid,txt] of Object.entries(texts||{})){
-    const el = cards[rid];                 // only the speculative pass fills text
+    const el = cards[rid];
     if(!el) continue;
     el.querySelector("p").textContent = txt;
     el.classList.add("live");
   }
 }
 
+function resetLane(lane){
+  $("strip-"+lane).innerHTML = "";
+  $("v-round-"+lane).textContent = $("v-mode-"+lane).textContent = $("v-gamma-"+lane).textContent =
+    $("v-alpha-"+lane).textContent = $("v-tps-"+lane).textContent = $("v-aq-"+lane).textContent = "—";
+  $("v-mode-"+lane).className = ""; $("v-breaker-"+lane).textContent = "—";
+  $("sparklab-"+lane).textContent = "—";
+  drawSpark([], lane);
+}
 function reset(){
-  $("strip").innerHTML = ""; lastPass = null;
-  $("v-round").textContent = $("v-mode").textContent = $("v-gamma").textContent =
-    $("v-alpha").textContent = $("v-tps").textContent = $("v-aq").textContent = "—";
-  $("v-mode").className = ""; $("v-breaker").textContent = "breaker: —";
-  $("sparklab").textContent = "—"; $("result").innerHTML = "";
-  drawSpark([]);
+  resetLane("a"); resetLane("b");
+  $("result").innerHTML = "";
+  SERIES.A = []; SERIES.B = [];
 }
 
 const GLOSS = "Parity on this pair: at batch 1 on Apple silicon the draft forward "
   + "isn't cheap enough relative to the target. The value here is that it's "
   + "token-exact and honestly measured — see note 03.";
 
-function render(ev, d, series){
-  if(ev === "start"){ ensureCards(d.prompts); }
-  else if(ev === "round"){
+function renderLane(ev, d, series){
+  if(ev === "round"){
     setTelem(d); pushStrip(d); setStream(d.texts);
-    series.push(d.tok_per_s);
-    $("sparklab").textContent = d.tok_per_s.toFixed(1) + " tok/s";
-    drawSpark(series);
+    if(series){
+      series.push(d.tok_per_s);
+      $("sparklab-"+laneOf(d.pass)).textContent = d.tok_per_s.toFixed(1) + " tok/s";
+      drawSpark(series, laneOf(d.pass));
+    }
+  } else if(ev === "done"){
+    for(const [rid, el] of Object.entries(cards)) if(rid[0] === d.pass) el.classList.remove("live");
   }
-  else if(ev === "done"){
-    for(const el of Object.values(cards)) el.classList.remove("live");
-  }
-  else if(ev === "compare_done"){
-    const s = d.speculative.agg_tok_per_s, b = d.baseline.agg_tok_per_s;
-    $("result").innerHTML =
-      `speculative <span class="x">${s.toFixed(1)}</span> tok/s &middot; `
-      + `baseline ${b.toFixed(1)} tok/s &middot; <span class="x">${d.speedup.toFixed(2)}&times;</span>`
-      + `<span class="gloss">${GLOSS}</span>`;
-  }
+}
+function renderCompare(d){
+  const s = d.speculative.agg_tok_per_s, b = d.baseline.agg_tok_per_s;
+  $("result").innerHTML =
+    `speculative <span class="x">${s.toFixed(1)}</span> tok/s &middot; `
+    + `baseline ${b.toFixed(1)} tok/s &middot; <span class="x">${d.speedup.toFixed(2)}&times;</span>`
+    + `<span class="gloss">${GLOSS}</span>`;
 }
 
 // ------------------------------------------------------------------ replay
 let SPEED = 1, PLAYING = false, CURRENT = null, PLAY_TOKEN = 0;
+const SERIES = {A: [], B: []};
 
 $("speed").addEventListener("click", e=>{
   const b = e.target.closest("button[data-sp]"); if(!b) return;
@@ -555,13 +592,38 @@ $("speed").addEventListener("click", e=>{
   [...$("speed").children].forEach(x=>x.classList.toggle("on", x === b));
 });
 
-function paceTable(events){
-  // preserve the real rhythm: per-round delay ∝ recorded wall_ms, scaled so the
-  // whole replay is ~16 s at 1×, clamped so nothing is imperceptible or a slog
+function splitEvents(events){
+  return {
+    A: events.filter(e => (e.event === "round" || e.event === "done") && e.data.pass === "A"),
+    B: events.filter(e => (e.event === "round" || e.event === "done") && e.data.pass === "B"),
+  };
+}
+
+function sharedScale(eventsA, eventsB){
+  // one scale for both lanes (not one each) -- so a lane with less total
+  // recorded wall-clock time actually finishes first on screen, instead of
+  // both being independently stretched to the same duration and hiding which
+  // one was really faster
+  const sum = evs => evs.filter(e=>e.event === "round").reduce((s,e)=>s + (e.data.wall_ms || 60), 0);
+  const totalMax = Math.max(sum(eventsA), sum(eventsB), 1);
+  return 16000 / totalMax;
+}
+
+async function playLane(events, scale, passTag, myToken){
+  const lane = laneOf(passTag);
   const rounds = events.filter(e=>e.event === "round");
-  const total = rounds.reduce((a,e)=>a + (e.data.wall_ms || 60), 0) || 1;
-  const scale = 16000 / total;
-  return e => Math.max(14, Math.min(190, (e.data.wall_ms || 60) * scale));
+  let seen = 0;
+  for(const {event, data} of events){
+    if(myToken !== PLAY_TOKEN) return;
+    renderLane(event, data, SERIES[passTag]);
+    if(event === "round"){
+      seen++; $("prog-"+lane).textContent = `round ${seen} / ${rounds.length}`;
+      const delay = Math.max(14, Math.min(190, (data.wall_ms || 60) * scale));
+      await new Promise(r=>setTimeout(r, delay / SPEED));
+      if(myToken !== PLAY_TOKEN) return;
+    }
+  }
+  $("prog-"+lane).textContent = `done · ${rounds.length} rounds`;
 }
 
 async function replay(){
@@ -570,21 +632,18 @@ async function replay(){
   if(PLAYING) return;
   PLAYING = true; $("replay").disabled = true;
   const myToken = PLAY_TOKEN;          // switching scenarios bumps PLAY_TOKEN,
-  reset();                             // which stops this loop below instead
-  const series = [];                   // of stacking a second setTimeout chain
-  const delayFor = paceTable(run.events);
-  const nRounds = run.events.filter(e=>e.event === "round").length;
-  let seen = 0;
-  for(const {event, data} of run.events){
-    if(myToken !== PLAY_TOKEN) return; // superseded by a scenario switch
-    render(event, data, series);
-    if(event === "round"){
-      seen++; $("prog").textContent = `round ${seen} / ${nRounds}`;
-      await new Promise(r=>setTimeout(r, delayFor({data}) / SPEED));
-      if(myToken !== PLAY_TOKEN) return;
-    }
-  }
-  $("prog").textContent = `done · ${nRounds} rounds`;
+  reset();                             // which stops both loops below instead
+  const start = run.events.find(e=>e.event === "start");
+  if(start) ensureCards(start.data.prompts);
+  const {A, B} = splitEvents(run.events);
+  const scale = sharedScale(A, B);
+  await Promise.all([
+    playLane(A, scale, "A", myToken),
+    playLane(B, scale, "B", myToken),
+  ]);
+  if(myToken !== PLAY_TOKEN) return;   // superseded by a scenario switch
+  const cmp = run.events.find(e=>e.event === "compare_done");
+  if(cmp) renderCompare(cmp.data);
   PLAYING = false; $("replay").disabled = false;
   $("replay").innerHTML = "&#9654;&nbsp; Replay again";
 }
@@ -594,26 +653,26 @@ $("replay").onclick = replay;
 function paintStatic(run){
   const dones = run.events.filter(e=>e.event === "done").map(e=>e.data);
   const cmp = run.events.find(e=>e.event === "compare_done");
+  const aDone = dones.find(d=>d.pass === "A"), bDone = dones.find(d=>d.pass === "B");
   const toks = dones.reduce((a,d)=>a + d.total_tokens, 0);
-  const rnds = run.events.filter(e=>e.event === "round").length;
   $("runmeta").textContent =
     `${run.captured} · ${run.backend === "qwen" ? "Qwen2.5-0.5B / 1.5B" : run.backend}`
-    + ` · ${dones[0] ? dones[0].prompts : "?"} prompts · ${toks} tokens · ${rnds} rounds`
-    + ` · speculative pass then baseline pass`;
+    + ` · ${aDone ? aDone.prompts : "?"} prompts · ${toks} tokens`
+    + ` · speculative & baseline, replayed side by side`;
   $("runcaption").textContent = run.caption || "";
   reset();
   const start = run.events.find(e=>e.event === "start");
   if(start) ensureCards(start.data.prompts);
   for(const el of Object.values(cards)) el.classList.remove("live");
-  // show the finished speculative outputs + the headline, statically, pre-replay
-  const specDone = dones.find(d=>d.spec);
-  if(specDone && specDone.final_texts){
-    for(const [rid,txt] of Object.entries(specDone.final_texts)){
-      if(cards[rid.replace("B","A")]) cards[rid.replace("B","A")].querySelector("p").textContent = txt;
-    }
+  // show the finished outputs + the headline, statically, pre-replay
+  for(const done of [aDone, bDone]){
+    if(!done || !done.final_texts) continue;
+    for(const [rid,txt] of Object.entries(done.final_texts))
+      if(cards[rid]) cards[rid].querySelector("p").textContent = txt;
   }
-  if(cmp) render("compare_done", cmp.data, []);
-  $("prog").textContent = "";
+  $("prog-a").textContent = aDone ? `done · ${aDone.n_rounds} rounds` : "—";
+  $("prog-b").textContent = bDone ? `done · ${bDone.n_rounds} rounds` : "—";
+  if(cmp) renderCompare(cmp.data);
   $("replay").disabled = false;
   $("replay").innerHTML = "&#9654;&nbsp; Replay";
 }
@@ -663,7 +722,8 @@ fetch("/health").then(r=>r.ok ? r.json() : null).then(h=>{
   $("lb-run").onclick = async ()=>{
     if(PLAYING) return; PLAYING = true; $("lb-run").disabled = $("replay").disabled = true;
     reset();
-    const series = [], body = {
+    ensureCards([$("lb-prompt").value]);
+    const body = {
       prompt: $("lb-prompt").value, max_tokens: 128, compare: true,
       spec: T.spec.getAttribute("aria-pressed") === "true",
       gammatune: T.gt.getAttribute("aria-pressed") === "true",
@@ -679,7 +739,14 @@ fetch("/health").then(r=>r.ok ? r.json() : null).then(h=>{
         let i; while((i = buf.indexOf("\n\n")) >= 0){
           const blk = buf.slice(0,i); buf = buf.slice(i+2);
           const ev = /event: (.*)/.exec(blk), da = /data: (.*)/s.exec(blk);
-          if(ev && da) render(ev[1].trim(), JSON.parse(da[1]), series);
+          if(!ev || !da) continue;
+          const evName = ev[1].trim(), d = JSON.parse(da[1]);
+          // live path uses the same pass-tagged event shape as the recordings
+          // (src/serve_http.py's _one_pass yields "A" then "B"), so the same
+          // per-lane renderer works for both -- real SSE arrival timing drives
+          // the pacing here instead of the recorded wall_ms table
+          if(evName === "compare_done") renderCompare(d);
+          else renderLane(evName, d, SERIES[d.pass]);
         }
       }
     }catch(e){ $("result").textContent = "error: " + e.message; }
