@@ -27,6 +27,12 @@ TEMPERATURE = 0.0
 TOP_P = 1.0
 OUTPUT_LEN = 1024
 SEED = 42
+# vLLM derives --max-model-len from the model config if you don't set it --
+# Llama-3.1-8B-Instruct's native context is 128K, and vLLM sizes the KV cache
+# (and CUDA-graph capture) against whatever max-model-len it ends up with.
+# GSM8K prompts + our OUTPUT_LEN are both short; capping this avoids either an
+# OOM or a much slower server startup on a single A100/H100 for no benefit.
+MAX_MODEL_LEN = 4096
 DATASET = "gsm8k"  # full 1319-example test split -- 坑2, task-domain match matters
 CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
 ARM_NAMES = ("eagle3", "ngram", "draft_model", "baseline")

@@ -38,6 +38,7 @@ def vllm_serve_cmd(arm: config.ArmSpec, port: int = config.VLLM_PORT) -> list[st
         "vllm", "serve", config.TARGET_MODEL,
         "--seed", str(config.SEED),
         "--port", str(port),
+        "--max-model-len", str(config.MAX_MODEL_LEN),
     ]
     if arm.speculative_config is not None:
         cmd += ["--speculative-config", json.dumps(arm.speculative_config)]

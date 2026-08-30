@@ -5,6 +5,8 @@
 > 本文件是 `TASKS.md` 支柱7 Bullet 2（第 112 行，`[ ]` 未完成）的执行手册；
 > 完整的定位/主线/资历叙事见 `notes/简历定稿计划-Specter_2026-08-28.md` 第 3
 > 节（这份文件是 source of truth，本计划只管"怎么跑"）。
+> **用户已确定用 Lambda Labs 租卡——先读 §1.5，那是专门针对 Lambda 的排查，
+> 比下面 §4 步骤1里"Vast.ai 或 RunPod"的通用描述新，以 §1.5 为准。**
 
 ## 0. 一句话目标
 
@@ -18,9 +20,14 @@ README 第 3 个 headline 数字、engineering note #7（Mac vs A100 对照）�
 
 ## 1. 读这个之前先读：预算与安全护栏
 
-- **硬预算 ~$15–20，一个下午。** Vast.ai spot RTX 4090 约 $0.25–0.35/hr、
-  A100 80GB 约 $0.5–0.72/hr；RunPod 按秒计费，community A100 约 $1.64/hr。
-  8B target 模型 RTX 4090 够用，不需要 A100（除非想顺手测 70B，不在本计划范围）。
+- **硬预算 ~$15–20，一个下午。** 原先设想的 Vast.ai/RunPod 价位（RTX 4090
+  spot ~$0.25–0.35/hr、A100 ~$0.5–1.64/hr）已不适用——**用户确定用 Lambda
+  Labs**，Lambda 没有 spot，A100/H100 on-demand 历史价位在 $1.3–3.3/hr 区间
+  （以 lambda.ai/pricing 当天实际显示的为准），**按分钟计费、从 launch 到
+  terminate 整段时间都算钱**（不是按 GPU 利用率），预算和时间控制要按这个
+  口径重新估：4臂×5档并发的完整矩阵按 P-EAGLE 论文量级，2–3 小时内应该能
+  跑完，加上搭环境/下模型/核对 CLI 语法，一个下午单卡预算仍在 $15–20 区间，
+  但比 Vast.ai 那档略贵，纯粹是换了"不会被抢占、不用挑 spot"这个稳定性。
 - **`src/cloud_bench/orchestrate.py` 有 `--max-runtime-min` 硬顶**（默认 180
   分钟）——超时会抛 `RuntimeBudgetExceeded` 并中止，不会讲那台机器晾在那。
   但这只挡得住"跑单个 `orchestrate.py` 进程"这段时间，**不会自动销毁云实例**。
@@ -28,6 +35,54 @@ README 第 3 个 headline 数字、engineering note #7（Mac vs A100 对照）�
   这件事没有任何脚本能替你做，必须是执行者手动确认。
 - 不要在没做 §4 步骤 4 的"~95% 复现自检"之前就跑完整矩阵——配错一个 flag
   在完整矩阵上重跑是双倍花费。
+
+## 1.5 Lambda Labs 专属风险排查（2026-08-30 新增，用户已确定用 Lambda，执行前必读）
+
+这一节是专门针对 Lambda Labs（而不是原先设想的 Vast.ai/RunPod）做的一次全面
+排查，把能在本地/查资料阶段发现的问题都列出来，代码能修的已经修了。
+
+1. **Lambda 只有 terminate，没有 stop/pause。** 官方文档确认：instance 一
+   launch 就开始按分钟计费，直到 terminate 才停，不管你有没有在跑东西；本地
+   NVMe 上的所有东西 terminate 就永久消失（除非另外挂载 persistent
+   filesystem——那是单独收费、按 region 锁定的东西，这次用不上）。**结论：
+   这次必须一次性跑完**——环境搭建→sanity check→完整矩阵→结果 scp 回本地→
+   立刻 terminate，中间不要指望"先歇一下，明天接着跑"，中途真要停就必须先把
+   整个 `results/` 目录 scp 回本地再 terminate，下次是全新实例，环境要重搭。
+   这也是为什么步骤5要求全程 `tmux`——一旦开始跑完整矩阵，中途唯一能保护
+   进度的手段就是不让 SSH 断线杀死进程 + `orchestrate.py` 自带的续跑
+   （见下方步骤5正文），terminate 本身没有任何"救回来"的余地。
+2. **A100/H100 on-demand 容量在 2026 年经常紧张**，高峰期 dashboard 可能直接
+   显示某型号 0 台可租——这是 Lambda 全平台的普遍情况，不是账号问题，换个
+   region 或者 A100/H100 互相试一下即可。
+3. **`--max-model-len` 之前漏设，已经在代码里修掉。** vLLM 不显式设这个会按
+   模型原生上下文长度（Llama-3.1-8B 是 128K）去分配 KV cache/CUDA graph，
+   单卡上轻则起服务巨慢，重则 OOM——GSM8K 的 prompt 和 `OUTPUT_LEN=1024`
+   根本用不到那么长。`config.MAX_MODEL_LEN=4096` 现在会被
+   `vllm_serve_cmd` 自动带上，不需要手动加。
+4. **`VLLM_USE_V1` 环境变量已经在 vLLM 2025-11-12 那次改动里被彻底删除**
+   （V1 现在是唯一引擎，没有 V0 可切换），`remote_setup.sh` 里原来
+   `export VLLM_USE_V1=1` 那行是空操作，已经删掉——不影响正确性，只是避免
+   照抄一个不存在的开关。`pip install "vllm>=0.9"` 在 2026-08 装到的实际
+   版本会新得多，功能上没问题，但仍然要走一遍 §3 的 `--help` 核对。
+5. **`ngram` / `draft_model` 这两个 method 名字这次查证仍然有效**——官方
+   vLLM speculative decoding 文档现存的 method 列表（ngram / suffix / eagle /
+   eagle3 / mtp / draft_model / medusa / dflash）明确包含这两个，
+   `config.py` 里锁的字段基本对得上官方给的示例写法。这原本是这份计划里
+   最担心的一处（之前没查证过），现在降级为低风险，§3 起服务时肉眼确认一次
+   就够了。
+6. **HF gated 模型批准状态是硬门槛。** 你之前截图两个模型都还是 pending；
+   必须等 huggingface.co 上两个模型都显示"You have been granted access"
+   （不是 pending）再租机器——pending 状态下 `huggingface-cli login` 之后
+   `snapshot_download`/`vllm serve` 照样 403，等于白付了搭环境那段时间的钱。
+7. **guidellm CLI 语法仍是这份计划里最大的未验证项，没有变化。** 这次查到
+   vLLM 官方项目自己给的示例用的正是 `--rate-type concurrent --rate N`
+   这个搭配，可信度比之前高，但 guidellm 版本迭代快，§3 仍然要求先
+   `guidellm benchmark --help` 核对一遍再花钱跑矩阵。
+8. **Lambda 计费按"launch 到 terminate"整段时间的分钟数算，不看 GPU 利用率**
+   ——搭环境、下模型、核对 CLI 语法这些"没在真正跑基准"的时间也在计费，
+   所以 §4 步骤2/3 要抓紧做，不要一边挂着机器一边慢慢查文档。
+9. **Lambda 要求先在 dashboard 上传 SSH 公钥才能 launch 实例**，没有密码登录
+   这条路——如果你本地还没有 SSH key，租之前先 `ssh-keygen` 生成一对。
 
 ## 2. 本次会话已经在本地准备好的东西（无需重做）
 
@@ -65,7 +120,9 @@ README 第 3 个 headline 数字、engineering note #7（Mac vs A100 对照）�
   `1.25 * 0.95` 就 FAIL 退出码 1，提示先别跑完整矩阵。
 - `src/cloud_bench/remote_setup.sh` —— 云端环境搭建脚本（装 vllm/guidellm、
   提示先看 `guidellm --help` 确认 CLI 语法、`huggingface-cli login`
-  提示、预取三个模型、设 `VLLM_USE_V1=1`、结尾提醒销毁实例）。
+  提示、预取三个模型、结尾提醒销毁实例）。**`VLLM_USE_V1` 已经从脚本里删掉**——
+  这个环境变量在 vLLM 2025-11-12 起已被移除（V1 是唯一引擎，没有 V0 可切换了），
+  设了也是空操作，不影响正确性，只是删掉避免误导。
 - `tests/test_cloud_bench.py` —— 24 个 hermetic 测试（mock subprocess/urlopen/
   clock），覆盖命令拼接、健康检查超时、结果归一化、speedup 数学、运行时预算
   护栏、JSON/JS 写出。`pytest -q` 全套 221→**245**。
@@ -112,12 +169,15 @@ GuideLLM 输出 JSON 后，`cat` 出来看一眼真实 key，照着改 `_dig()` 
 
 ### 步骤 1 —— 租 GPU
 
-Vast.ai 或 RunPod，筛选：RTX 4090（8B target 够用，更便宜）或 A100 80GB。
-确认单卡显存 ≥24GB（8B fp16 weights ~16GB + KV cache + EAGLE3 draft head，
-留够余量）。**避开可被抢占的档位**——Vast.ai 最便宜的 interruptible/spot
-只给 15 秒通知就可能被别人出价挤掉，整台机器（含还没落盘的东西）说没就没；
-选 on-demand/Secure Cloud 这类不会被抢占的档位，多花一点点钱换这一步不用
-担心。记下 SSH 连接信息。
+**用户已确定用 Lambda Labs**（其余描述留作 Vast.ai/RunPod 的备选，Lambda 没
+有 spot/可抢占档，不用挑"避开抢占"那一层，但 §1.5 第1条的"只有 terminate
+没有 stop"仍然适用）。Lambda dashboard 选 A100（40GB 或 80GB 都够，8B fp16
+weights ~16GB + KV cache + EAGLE3 draft head 留够余量）或 H100；库存紧张就
+换 region 或换型号试（§1.5 第2条）。租之前确认：
+- 本地已有 SSH 公钥并上传到 Lambda 账号（§1.5 第9条）；
+- 两个 gated 模型在 huggingface.co 上都已经是"granted access"而不是
+  "pending"（§1.5 第6条）——这一步比选机型更容易卡住,提前确认好。
+记下 SSH 连接信息。
 
 ### 步骤 2 —— 环境搭建
 
@@ -128,7 +188,8 @@ bash remote_setup.sh
 ```
 它会装 vllm + guidellm、提示做 §3 的 CLI 核对、提示 `huggingface-cli login`
 （`meta-llama/Llama-3.1-8B-Instruct` 和 `Llama-3.2-1B-Instruct` 是 gated repo，
-需要在 HF 上先接受协议）、预取三个模型权重、设 `VLLM_USE_V1=1`。
+**必须在 HF 网页上显示"You have been granted access"而不是"pending"再租**——
+pending 状态下载会 403，等于白付了搭环境那段时间的钱）、预取三个模型权重。
 
 ### 步骤 3 —— 核对 CLI 语法 + 干跑一遍命令计划
 
@@ -154,8 +215,8 @@ PYTHONPATH=src python -m cloud_bench.sanity_check \
     --eagle3-tok-per-s <测到的数> --baseline-tok-per-s <测到的数>
 ```
 **FAIL 就停**，回去检查 `--speculative-config` 里的 `num_speculative_tokens`、
-draft/target 是不是同族、tokenizer 对不对齐、是不是漏开 `VLLM_USE_V1=1`——
-不要在配错的情况下跑完整矩阵。PASS 才进入步骤 5。
+draft/target 是不是同族、tokenizer 对不对齐、`--max-model-len` 是不是被起
+太大导致 KV cache 挤占异常——不要在配错的情况下跑完整矩阵。PASS 才进入步骤 5。
 
 ### 步骤 5 —— 跑完整矩阵
 
@@ -192,8 +253,10 @@ scp <instance>:~/Specter/docs/site/cloud_bench.js docs/site/
 
 ### 步骤 7 —— 立刻销毁云实例
 
-回 Vast.ai/RunPod 控制台点 destroy/terminate。**这一步没有任何自动化，必须
-手动确认**——本计划里所有的时间/命令护栏都不能替代这一步。
+回 Lambda dashboard 点 **Terminate**（Lambda 没有"stop"这个状态，只有
+terminate——§1.5 第1条）。**确认步骤6的 scp 已经成功、本地能打开那两个文件
+再点**，terminate 之后实例本地盘的东西没有任何恢复手段。这一步没有任何
+自动化，必须手动确认——本计划里所有的时间/命令护栏都不能替代这一步。
 
 ### 步骤 8 —— 回本地写反馈
 

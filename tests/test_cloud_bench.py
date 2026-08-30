@@ -51,6 +51,14 @@ def test_vllm_serve_cmd_locks_seed():
     assert cmd[cmd.index("--seed") + 1] == str(config.SEED)
 
 
+def test_vllm_serve_cmd_caps_max_model_len():
+    # Without this, vLLM derives max-model-len from the model config (128K
+    # for Llama-3.1) and sizes the KV cache/CUDA-graph capture against that,
+    # which risks an OOM or a much slower startup for no benefit on GSM8K.
+    cmd = orchestrate.vllm_serve_cmd(config.arm_spec_by_name("baseline"))
+    assert cmd[cmd.index("--max-model-len") + 1] == str(config.MAX_MODEL_LEN)
+
+
 # ----------------------------------------------------------------- guidellm_cmd
 
 def test_guidellm_cmd_uses_requested_concurrency_and_locked_config(tmp_path):
