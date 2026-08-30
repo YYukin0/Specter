@@ -163,7 +163,11 @@
       M-series Mac and replayed here frame for frame: speculative and baseline
       side by side, at the same time, so you can watch which one actually
       finishes first instead of reading it off a table. Nothing runs in this
-      page; it&rsquo;s a recording.
+      page; it&rsquo;s a recording. Each generation is capped at a fixed
+      token budget, so endings can cut off mid-sentence, and the two lanes
+      can differ by up to one token right at that cutoff — a block-boundary
+      artifact of speculative decoding&rsquo;s per-&gamma; acceptance, not a
+      correctness issue.
       <span id="live-hint" hidden>&nbsp;A local backend is answering —
       <a href="#livebox" id="live-jump">run your own prompt&nbsp;&darr;</a></span></p>
 
