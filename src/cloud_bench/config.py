@@ -1,16 +1,15 @@
-"""Locked config for Bullet 2 (支柱7 TASKS.md) -- the ~$15 vLLM/A100 EAGLE3
+"""Locked config for Bullet 2 (支柱7 TASKS.md) -- the ~$15 vLLM EAGLE3
 speculative-decoding benchmark. Every field here is fixed BEFORE the GPU is
 rented, per notes/简历定稿计划-Specter_2026-08-28.md 坑3: cross-framework
 acceptance metrics are only comparable when num_speculative_tokens, sampling,
 output length and dataset are held identical across arms.
 
-None of this has been run against a real vLLM/GuideLLM install -- neither is
-in this repo's .venv, and there is no local CUDA GPU to test against. Treat
-the exact CLI flags in orchestrate.py as a best-effort draft from public docs
-(2026-08), not a verified recipe; the execution plan
-(notes/cloud-bullet2-execution-plan_2026-08-29.md) says to reconcile them
-against `vllm serve --help` / `guidellm --help` on the rented box before
-spending on the full matrix.
+Run for real on a rented RunPod A40 (2026-08-30, not the A100 originally
+planned -- Lambda Labs card issues forced a provider switch), vllm==0.10.2 +
+guidellm==0.7.3. See docs/pitfalls.md 坑27-29 and
+docs/engineering-notes/09-mac-vs-a40.md for what didn't match the
+public-docs guess this module started as, and results/bullet2_vllm_eagle3.json
+for the real numbers.
 """
 from __future__ import annotations
 
@@ -43,7 +42,7 @@ DATASET = "openai/gsm8k"  # full 1319-example test split -- 坑2, task-domain ma
 DATASET_CONFIG = "main"
 DATASET_SPLIT = "test"
 CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
-# 坑27: "draft_model" is excluded from the default run -- vllm==0.10.2's V1
+# 坑29: "draft_model" is excluded from the default run -- vllm==0.10.2's V1
 # engine oracle rejects it outright at server startup: `NotImplementedError:
 # Speculative decoding with draft model is not supported yet. Please
 # consider using other speculative decoding methods such as ngram, medusa,
@@ -54,7 +53,7 @@ CONCURRENCIES = (1, 4, 16, 32, 64)  # 坑1: only a sweep exposes the collapse
 # record; it's just not in the set orchestrate.run_matrix() runs by default.
 ARM_NAMES = ("eagle3", "ngram", "baseline")
 
-# 坑25: guidellm run has NO default stopping point against a real (non-infinite)
+# 坑27: guidellm run has NO default stopping point against a real (non-infinite)
 # dataset -- a concurrency=1 baseline run against full GSM8K (1319 rows) was
 # observed still running 8+ minutes in on the rented A40 before this was
 # added. Each arm x concurrency point gets this many wall-clock seconds

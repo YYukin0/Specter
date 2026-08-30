@@ -73,7 +73,7 @@ def guidellm_cmd(
     split). `MaxDurationConstraintArgs.seconds` (guidellm.scheduler.
     constraints, cross-checked against `guidellm run --help`'s `--constraint
     kind=max_duration,...`) bounds each arm x concurrency point to a fixed
-    wall-clock budget instead -- 坑25, matches the 60s/point figure the
+    wall-clock budget instead -- 坑27, matches the 60s/point figure the
     execution plan called out before any of this was verified."""
     target_url = target_url or f"http://localhost:{config.VLLM_PORT}"
     backend = (
@@ -129,7 +129,7 @@ def normalize_guidellm_result(raw: dict, concurrency: int) -> dict:
     the earlier version of this function was a placeholder guessing at
     field paths that never matched, silently producing all-null records
     (caught because compute_speedup would have divided by None, not because
-    anything crashed -- 坑25 continued). Real shape:
+    anything crashed -- 坑28). Real shape:
     `raw = {"metadata", "config", "benchmarks": [...]}`; each
     `benchmarks[i]["metrics"][<metric_name>]` is a per-completion-status
     breakdown (`{"successful": <stats>, "errored": <stats>, ...}`), and each
@@ -204,7 +204,7 @@ def run_matrix(
     # config.ARM_NAMES, not [s.name for s in config.arm_specs()] -- the
     # latter includes "draft_model", which arm_specs() still defines for the
     # record but which vllm==0.10.2's V1 engine outright rejects at server
-    # startup (坑27). Defaulting to arm_specs() here is exactly what let
+    # startup (坑29). Defaulting to arm_specs() here is exactly what let
     # draft_model into a real matrix run and killed the orchestrator mid-run
     # on the rented A40 (2026-08-30) waiting on a /health that would never
     # come.

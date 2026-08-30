@@ -29,7 +29,7 @@ def _fake_guidellm_json(output_tokens_per_sec: float) -> str:
 # --------------------------------------------------------------------- config
 
 def test_arm_specs_cover_expected_names():
-    # 坑27: arm_specs() still defines "draft_model" for the record, but it's
+    # 坑29: arm_specs() still defines "draft_model" for the record, but it's
     # deliberately excluded from ARM_NAMES (the default run set) -- vllm==
     # 0.10.2's V1 engine rejects that method outright at server startup.
     names = [s.name for s in config.arm_specs()]
@@ -201,7 +201,7 @@ def test_compute_speedup_raises_on_zero_baseline_throughput():
 # --------------------------------------------------------------------- run_matrix
 
 def test_run_matrix_defaults_to_arm_names_not_all_arm_specs():
-    # 坑27 regression: the default must exclude "draft_model" (vllm==0.10.2's
+    # 坑29 regression: the default must exclude "draft_model" (vllm==0.10.2's
     # V1 engine rejects it at server startup), not fall back to
     # arm_specs() (4 arms, including draft_model).
     matrix = orchestrate.run_matrix(
@@ -249,11 +249,16 @@ def test_run_matrix_executes_and_collects_results(tmp_path, monkeypatch):
     assert matrix["results"]["baseline"]["concurrency"][1]["mean_output_tokens_per_sec"] == 50.0
 
 
-def test_run_matrix_aborts_when_health_check_fails(monkeypatch):
+def test_run_matrix_aborts_when_health_check_fails(tmp_path, monkeypatch):
+    # results_dir must be isolated (tmp_path) -- the real results/cloud_bench_raw/
+    # now has genuine cached guidellm output from the rented A40, and this test
+    # otherwise silently passes for the wrong reason (arm "already done", so
+    # wait_for_health is never even called).
     monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: False)
     with pytest.raises(RuntimeError, match="never became healthy"):
         orchestrate.run_matrix(
-            arms=["baseline"], concurrencies=[1], dry_run=False,
+            arms=["baseline"], concurrencies=[1],
+            results_dir=tmp_path, dry_run=False,
             popen=lambda cmd: type("P", (), {"terminate": lambda s: None, "wait": lambda s, timeout=None: None})(),
             run=lambda *a, **k: (_ for _ in ()).throw(AssertionError("run should not be called")),
         )
