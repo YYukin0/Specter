@@ -132,6 +132,28 @@
   #cloud .legend{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 0;
     font:600 11px/1 var(--mono);color:var(--dim)}
   #cloud .legend b{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
+  #cloud .armgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+  @media(max-width:720px){#cloud .armgrid{grid-template-columns:1fr}}
+  #cloud .armcard{background:var(--panel2);border:1px solid var(--line);padding:11px 13px}
+  #cloud .armcard h5{margin:0 0 8px;font:600 11px/1 var(--sans);letter-spacing:.08em;
+    text-transform:uppercase;color:var(--head)}
+  #cloud .armcard div{display:flex;justify-content:space-between;font-size:12px;
+    padding:4px 0;border-top:1px solid var(--line)}
+  #cloud .armcard div:first-of-type{border-top:0}
+  #cloud .armcard k{color:var(--dim)}
+  #cloud .armcard v{font-family:var(--mono);color:var(--ink)}
+  #cloud .metricbars{margin-top:18px}
+  #cloud .metricbars .row{margin-bottom:16px}
+  #cloud .metricbars .rowlabel{font:600 11px/1 var(--sans);letter-spacing:.08em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  #cloud .metricbars .bar{display:flex;align-items:center;gap:8px;margin-bottom:5px;
+    font-family:var(--mono);font-size:11.5px}
+  #cloud .metricbars .bar .name{width:56px;color:var(--dim);text-transform:uppercase;
+    font:600 10px/1 var(--sans);letter-spacing:.06em}
+  #cloud .metricbars .bar .track{flex:1;background:var(--panel2);border:1px solid var(--line);
+    height:14px;position:relative}
+  #cloud .metricbars .bar .fill{position:absolute;top:0;left:0;bottom:0;transition:width .25s}
+  #cloud .metricbars .bar .val{width:66px;text-align:right;color:var(--dim)}
 </style>
 </head>
 <body>
@@ -248,7 +270,10 @@
       artifact? Locked config, concurrency sweep, EAGLE3 vs n-gram vs baseline
       (vLLM 0.10.2's V1 engine doesn't support the draft-model method &mdash;
       see <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a>
-      Pitfall 27). See engineering note&nbsp;09 for the Mac-vs-cloud writeup.</p>
+      Pitfall 27). See engineering note&nbsp;09 for the Mac-vs-cloud writeup.
+      Scrub or play through the concurrency sweep below to see <em>why</em> the
+      speedup collapses under load: time-to-first-token drops as batching kicks
+      in, then time-per-output-token climbs back up as the GPU saturates.</p>
     <div id="cloud-body"></div>
   </section>
 
@@ -400,33 +425,118 @@ function renderCloud(){
   const allPts = cb.arms.flatMap(a=>a.points||[]);
   const xs = [...new Set(allPts.map(p=>p.concurrency))].sort((a,b)=>a-b);
   const maxY = Math.max(1, ...allPts.map(p=>p.speedup)) * 1.15;
-  const canvas = document.createElement("canvas");
-  box.innerHTML = "";
-  const wrap = document.createElement("div"); wrap.className = "chartwrap";
-  wrap.appendChild(canvas); box.appendChild(wrap);
-  const legend = document.createElement("div"); legend.className = "legend";
+
+  box.innerHTML = `
+    <div class="controls" style="margin-bottom:14px">
+      <span class="seg" id="cloud-scrub">${xs.map(c=>`<button data-c="${c}">c=${c}</button>`).join("")}</span>
+      <button class="btn ghost" id="cloud-play">&#9654;&nbsp; Play sweep</button>
+    </div>
+    <div class="chartwrap"><canvas id="cloud-chart"></canvas></div>
+    <div class="legend" id="cloud-legend"></div>
+    <div class="armgrid" id="cloud-armgrid"></div>
+    <div class="metricbars" id="cloud-metricbars"></div>`;
+
+  const legend = $("cloud-legend");
   cb.arms.forEach((a,i)=>legend.insertAdjacentHTML("beforeend",
     `<span><b style="background:${ARM_COLOR[i%ARM_COLOR.length]}"></b>${a.name}</span>`));
-  box.appendChild(legend);
 
+  const canvas = $("cloud-chart");
   const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 600, h = 180;
   canvas.width = w*dpr; canvas.height = h*dpr;
   const ctx = canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
   const padL = 34, padB = 20, padT = 10, padR = 10;
   const xFor = c => padL + (xs.indexOf(c)/(Math.max(xs.length-1,1)))*(w-padL-padR);
   const yFor = v => h-padB - (v/maxY)*(h-padT-padB);
-  ctx.strokeStyle = "#28282d"; ctx.beginPath();
-  ctx.moveTo(padL, padT); ctx.lineTo(padL, h-padB); ctx.lineTo(w-padR, h-padB); ctx.stroke();
-  ctx.fillStyle = "#86847c"; ctx.font = "10px ui-monospace,monospace";
-  ctx.fillText("1.0x", 2, yFor(1)+3);
-  ctx.strokeStyle = "#28282d55"; ctx.beginPath(); ctx.moveTo(padL,yFor(1)); ctx.lineTo(w-padR,yFor(1)); ctx.stroke();
-  xs.forEach(c=>ctx.fillText(String(c), xFor(c)-4, h-4));
-  cb.arms.forEach((a,i)=>{
-    const pts = (a.points||[]).slice().sort((p,q)=>p.concurrency-q.concurrency);
-    ctx.strokeStyle = ARM_COLOR[i%ARM_COLOR.length]; ctx.lineWidth = 1.8; ctx.beginPath();
-    pts.forEach((p,j)=>{ const x=xFor(p.concurrency), y=yFor(p.speedup); j?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-    ctx.stroke();
-  });
+
+  function drawChart(activeC){
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle = "#28282d"; ctx.beginPath();
+    ctx.moveTo(padL, padT); ctx.lineTo(padL, h-padB); ctx.lineTo(w-padR, h-padB); ctx.stroke();
+    ctx.fillStyle = "#86847c"; ctx.font = "10px ui-monospace,monospace";
+    ctx.fillText("1.0x", 2, yFor(1)+3);
+    ctx.strokeStyle = "#28282d55"; ctx.beginPath(); ctx.moveTo(padL,yFor(1)); ctx.lineTo(w-padR,yFor(1)); ctx.stroke();
+    xs.forEach(c=>ctx.fillText(String(c), xFor(c)-4, h-4));
+    cb.arms.forEach((a,i)=>{
+      const pts = (a.points||[]).slice().sort((p,q)=>p.concurrency-q.concurrency);
+      ctx.strokeStyle = ARM_COLOR[i%ARM_COLOR.length]; ctx.lineWidth = 1.8; ctx.beginPath();
+      pts.forEach((p,j)=>{ const x=xFor(p.concurrency), y=yFor(p.speedup); j?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+      ctx.stroke();
+    });
+    // a scrubbed/playing concurrency gets a marker on every arm's line, so the
+    // armgrid/metricbars readouts below have something to visually anchor to
+    if(activeC != null){
+      const ax = xFor(activeC);
+      ctx.strokeStyle = "#e8e6df44"; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, h-padB); ctx.stroke();
+      ctx.setLineDash([]);
+      cb.arms.forEach((a,i)=>{
+        const p = (a.points||[]).find(p=>p.concurrency===activeC);
+        if(!p) return;
+        ctx.fillStyle = ARM_COLOR[i%ARM_COLOR.length];
+        ctx.beginPath(); ctx.arc(ax, yFor(p.speedup), 3.5, 0, Math.PI*2); ctx.fill();
+      });
+    }
+  }
+
+  function renderArmgrid(activeC){
+    const g = $("cloud-armgrid"); g.innerHTML = "";
+    cb.arms.forEach((a,i)=>{
+      const p = (a.points||[]).find(p=>p.concurrency===activeC);
+      if(!p) return;
+      g.insertAdjacentHTML("beforeend", `<div class="armcard" style="border-top:3px solid ${ARM_COLOR[i%ARM_COLOR.length]}">
+        <h5>${a.name}</h5>
+        <div><k>speedup</k><v>${p.speedup.toFixed(2)}&times;</v></div>
+        <div><k>ttft p99</k><v>${p.ttft_p99_ms.toFixed(0)} ms</v></div>
+        <div><k>tpot p99</k><v>${p.tpot_p99_ms.toFixed(1)} ms</v></div>
+      </div>`);
+    });
+  }
+
+  function renderBars(activeC){
+    const el = $("cloud-metricbars"); el.innerHTML = "";
+    [["ttft_p99_ms","TTFT p99 — time to first token"],
+     ["tpot_p99_ms","TPOT p99 — time per output token"]].forEach(([key,label])=>{
+      const pts = cb.arms.map(a=>(a.points||[]).find(p=>p.concurrency===activeC));
+      const mx = Math.max(...pts.filter(Boolean).map(p=>p[key])) * 1.08 || 1;
+      let rows = "";
+      cb.arms.forEach((a,i)=>{
+        const p = pts[i]; if(!p) return;
+        const pct = Math.max(2, p[key]/mx*100);
+        rows += `<div class="bar"><span class="name">${a.name}</span>
+          <span class="track"><span class="fill" style="width:${pct}%;background:${ARM_COLOR[i%ARM_COLOR.length]}"></span></span>
+          <span class="val">${p[key].toFixed(key==="tpot_p99_ms"?1:0)} ms</span></div>`;
+      });
+      el.insertAdjacentHTML("beforeend", `<div class="row"><div class="rowlabel">${label}</div>${rows}</div>`);
+    });
+  }
+
+  let active = xs[0], playing = false, playTimer = null;
+  function select(c){
+    active = c;
+    [...$("cloud-scrub").children].forEach(b=>b.classList.toggle("on", +b.dataset.c === c));
+    drawChart(c); renderArmgrid(c); renderBars(c);
+  }
+  function stopPlay(){
+    playing = false; clearInterval(playTimer);
+    $("cloud-play").innerHTML = "&#9654;&nbsp; Play sweep";
+  }
+  $("cloud-scrub").onclick = e=>{
+    const b = e.target.closest("button[data-c]"); if(!b) return;
+    stopPlay(); select(+b.dataset.c);
+  };
+  $("cloud-play").onclick = ()=>{
+    if(playing){ stopPlay(); return; }
+    playing = true; $("cloud-play").innerHTML = "&#10074;&#10074;&nbsp; Pause";
+    let idx = xs.indexOf(active);
+    if(idx < 0 || idx >= xs.length-1) idx = -1;
+    select(xs[idx+1]);
+    playTimer = setInterval(()=>{
+      const i = xs.indexOf(active);
+      if(i >= xs.length-1){ stopPlay(); return; }
+      select(xs[i+1]);
+    }, 1100);
+  };
+  select(xs[0]);
 }
 renderCloud();
 
