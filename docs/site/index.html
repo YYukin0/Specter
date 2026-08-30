@@ -262,10 +262,58 @@
     <div class="grid" id="notegrid" style="margin-top:24px"></div>
   </section>
 
+  <section id="priorart">
+    <div class="sechead"><div class="kicker">Positioning</div>
+      <h2>Where this sits (prior art)</h2></div>
+    <p class="lead" style="font-size:14px;color:var(--dim);margin-top:-12px;max-width:none">
+      Two established lines this repo draws on and is careful not to reinvent
+      &mdash; full citations in the
+      <a href="https://github.com/YYukin0/Specter/blob/main/README.md#where-this-sits-prior-art">README</a>.</p>
+    <div class="grid" style="margin-top:24px">
+      <div class="card">
+        <h3>Batch invariance is a kernel-layer property</h3>
+        <p>Thinking Machines&rsquo; batch-invariant kernels (He et al., 2025) make the
+          <em>same input</em> give the same bits across batch sizes. Oracle O5 here
+          (note 06) checks batch invariance one layer up &mdash; at the decode
+          loop, not the kernel &mdash; and holds by construction because the
+          batched decoder shares no ragged tensor.</p>
+      </div>
+      <div class="card">
+        <h3>Mutation testing, applied semantically</h3>
+        <p><code>cosmic-ray</code> / <code>mutmut</code> mutate syntax (literals,
+          operators). <code>spec_faultlib</code>&rsquo;s ~20 operators are semantic
+          (crop a KV cache wrong, draw the bonus token from the draft) &mdash; a
+          hand-written harness because a literal-mutation engine can&rsquo;t express
+          those. The methodology &mdash; operators &rarr; oracle battery &rarr; kill
+          matrix &mdash; is standard.</p>
+      </div>
+      <div class="card">
+        <h3>Downstream eval over the fake-model gap</h3>
+        <p>The EleutherAI <code>lm-evaluation-harness</code> drives GSM8K + IFEval
+          over an OpenAI-compatible endpoint, so the from-scratch AWQ build is
+          scored on the same config as the baselines (note 07) &mdash; not a new
+          harness, just a real one pointed at a from-scratch quantizer.</p>
+      </div>
+      <div class="card">
+        <h3>A textbook roofline case study</h3>
+        <p>Williams et al.&rsquo;s roofline model plus MLX&rsquo;s custom-Metal-kernel
+          API. Note 08&rsquo;s conclusion &mdash; <code>mx.compile</code> on a clean op
+          graph beats a single-threadgroup hand kernel &mdash; is the expected
+          one; the note is explicit it&rsquo;s a calibration exercise, not an
+          optimization.</p>
+      </div>
+    </div>
+    <p class="lead" style="font-size:13px;color:var(--dim);margin-top:20px;max-width:none">
+      The batched-decoding correctness framing (keep the batch rectangular, or
+      prove output-equivalence per sequence) follows EQSPEC /
+      <em>Batch Speculative Decoding Done Right</em> (arXiv:2510.22876); this
+      repo takes the per-sequence-cache side of that fork (note 03).</p>
+  </section>
+
   <footer>
     <div class="wrap" style="padding:0">
-      Built by <a href="https://github.com/YYukin0">YYukin0</a> &mdash; early groundwork
-      in collaboration with <a href="https://github.com/Michael8964">Michael8964</a>.
+      Built by <a href="https://github.com/YYukin0">YYukin0</a> and
+      <a href="https://github.com/Michael8964">Michael8964</a>.
       <br>
       Full trap log: <a href="https://github.com/YYukin0/Specter/blob/main/docs/pitfalls.md">docs/pitfalls.md</a> (Pitfalls 1&ndash;29) &middot;
       prior art and layout in the <a href="https://github.com/YYukin0/Specter/blob/main/README.md">README</a> &middot;

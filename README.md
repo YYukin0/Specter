@@ -275,3 +275,8 @@ Experiment drivers are `src/verify_*.py`; the model-backed ones expect the Qwen
 weights in the local Hugging Face cache and run offline (`HF_HUB_OFFLINE=1`).
 `verify_p6_6_downstream_eval.py` also needs an isolated `.venv-lmeval` with
 `lm-eval[api]` (it shells out to it so the main env keeps its pinned versions).
+
+---
+
+Built by [YYukin0](https://github.com/YYukin0) and
+[Michael8964](https://github.com/Michael8964).
