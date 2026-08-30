@@ -113,8 +113,11 @@ GuideLLM 输出 JSON 后，`cat` 出来看一眼真实 key，照着改 `_dig()` 
 ### 步骤 1 —— 租 GPU
 
 Vast.ai 或 RunPod，筛选：RTX 4090（8B target 够用，更便宜）或 A100 80GB。
-按小时计费的选 spot/community 价位最低的那档，确认单卡显存 ≥24GB（8B fp16
-weights ~16GB + KV cache + EAGLE3 draft head，留够余量）。记下 SSH 连接信息。
+确认单卡显存 ≥24GB（8B fp16 weights ~16GB + KV cache + EAGLE3 draft head，
+留够余量）。**避开可被抢占的档位**——Vast.ai 最便宜的 interruptible/spot
+只给 15 秒通知就可能被别人出价挤掉，整台机器（含还没落盘的东西）说没就没；
+选 on-demand/Secure Cloud 这类不会被抢占的档位，多花一点点钱换这一步不用
+担心。记下 SSH 连接信息。
 
 ### 步骤 2 —— 环境搭建
 
@@ -156,7 +159,11 @@ draft/target 是不是同族、tokenizer 对不对齐、是不是漏开 `VLLM_US
 
 ### 步骤 5 —— 跑完整矩阵
 
+**先用 `tmux`（或 `screen`）起一个会话再跑**，不要在裸 SSH 前台跑——笔记本
+合盖/wifi 掉线会给前台进程发 SIGHUP 直接杀掉，`tmux` 里的进程不受影响，
+重新 SSH 进去 `tmux attach` 就能接着看：
 ```bash
+tmux new -s bullet2
 PYTHONPATH=src python -m cloud_bench.orchestrate \
     --execute \
     --results-json results/bullet2_vllm_eagle3.json \
@@ -167,6 +174,14 @@ PYTHONPATH=src python -m cloud_bench.orchestrate \
 （1/4/16/32/64），全量 GSM8K（1319 题）。这一步是花钱的主体，中途盯着
 `nvidia-smi`/日志，出现卡死或报错立刻 Ctrl-C 并检查——不要让一个挂死的
 `guidellm benchmark` 空转吃钟点费。
+
+**中途真断了怎么办**：`orchestrate.py` 现在是可续跑的——每个
+(臂, 并发) 组合跑完立刻把 GuideLLM 原始输出写到
+`results/cloud_bench_raw/guidellm_{arm}_c{c}.json`，聚合结果每跑完一个点
+也会 checkpoint 到 `--results-json` 那个文件。原样重新执行上面同一条命令：
+已经完成的点会被直接读缓存跳过（整臂都跑完的话连 `vllm serve` 都不会重启），
+只从断点那个点继续跑，不会重复花钱。如果某个点的原始文件是半写坏的（进程
+正写到一半被杀），脚本会自动判定为无效重新跑那一个点，不需要手动删文件。
 
 ### 步骤 6 —— 把结果拉回本地
 

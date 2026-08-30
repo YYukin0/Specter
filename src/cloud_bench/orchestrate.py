@@ -154,12 +154,22 @@ def run_matrix(
     run=subprocess.run,
     sleep=time.sleep,
     now=time.monotonic,
+    checkpoint_path: Path | None = None,
 ) -> dict:
     """Serves each arm in turn, drives GuideLLM across the concurrency sweep,
     tears the server down, and moves to the next arm. dry_run=True (default)
     builds every command and returns it in "plan" without executing anything
     -- that's the mode this repo's tests exercise, and the mode to run once
-    on the box before spending on the real matrix."""
+    on the box before spending on the real matrix.
+
+    Resumable by construction: each concurrency point's raw GuideLLM output
+    lands at results_dir/guidellm_{arm}_c{c}.json as soon as that point
+    finishes, and a point whose file already exists (and parses) is reused
+    instead of re-run. If the whole arm is already done, its vllm server is
+    never even started. If checkpoint_path is given, the aggregated matrix
+    is rewritten to that path after every point completes, so a process that
+    dies mid-run (dropped SSH, preempted instance) loses at most the point it
+    was on -- rerunning the same command picks up where it left off."""
     arms = arms or [s.name for s in config.arm_specs()]
     concurrencies = concurrencies or list(config.CONCURRENCIES)
     deadline = now() + max_runtime_min * 60
@@ -171,9 +181,11 @@ def run_matrix(
         serve_cmd = vllm_serve_cmd(spec)
         plan.append(serve_cmd)
         arm_result: dict = {"concurrency": {}}
+        out_paths = {c: results_dir / f"guidellm_{arm_name}_c{c}.json" for c in concurrencies}
+        arm_already_done = (not dry_run) and all(_load_cached(p) is not None for p in out_paths.values())
         proc = None
         try:
-            if not dry_run:
+            if not dry_run and not arm_already_done:
                 proc = popen(serve_cmd)
                 if not wait_for_health(f"http://localhost:{config.VLLM_PORT}/health", sleep=sleep, now=now):
                     raise RuntimeError(f"vllm server for arm={arm_name} never became healthy")
@@ -183,13 +195,17 @@ def run_matrix(
                         f"max_runtime_min={max_runtime_min} exceeded before arm={arm_name} concurrency={c} -- "
                         "aborting so the rented instance doesn't run unattended"
                     )
-                out_path = results_dir / f"guidellm_{arm_name}_c{c}.json"
+                out_path = out_paths[c]
                 cmd = guidellm_cmd(c, out_path)
                 plan.append(cmd)
                 if not dry_run:
-                    run(cmd, check=True)
-                    raw = json.loads(out_path.read_text())
+                    raw = _load_cached(out_path)
+                    if raw is None:
+                        run(cmd, check=True)
+                        raw = json.loads(out_path.read_text())
                     arm_result["concurrency"][c] = normalize_guidellm_result(raw, c)
+                    if checkpoint_path is not None:
+                        write_results_json(checkpoint_path, {"plan": plan, "results": {**results, arm_name: arm_result}})
         finally:
             if proc is not None:
                 proc.terminate()
@@ -199,6 +215,19 @@ def run_matrix(
                     proc.kill()
         results[arm_name] = arm_result
     return {"plan": plan, "results": results}
+
+
+def _load_cached(out_path: Path) -> dict | None:
+    """Returns the parsed contents of a prior GuideLLM output file, or None
+    if it doesn't exist or is unreadable (partial write from a killed run) --
+    either way the caller re-runs that point rather than trusting a corrupt
+    file."""
+    if not out_path.exists():
+        return None
+    try:
+        return json.loads(out_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def to_demo_arms(matrix_results: dict[str, dict], baseline_name: str = "baseline") -> list[dict]:
@@ -262,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         arms=args.arms, concurrencies=args.concurrencies,
         results_dir=args.results_dir, dry_run=args.dry_run,
         max_runtime_min=args.max_runtime_min,
+        checkpoint_path=None if args.dry_run else args.results_json,
     )
     if args.dry_run:
         print(f"dry run -- {len(matrix['plan'])} commands planned, nothing executed:")

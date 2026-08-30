@@ -195,6 +195,98 @@ def test_run_matrix_aborts_when_health_check_fails(monkeypatch):
         )
 
 
+def test_run_matrix_resumes_from_existing_raw_output(tmp_path, monkeypatch):
+    # Simulate a prior crashed run: concurrency=1 already has a valid raw
+    # output file on disk; concurrency=4 does not.
+    cached = tmp_path / "guidellm_baseline_c1.json"
+    cached.write_text(json.dumps({"output_tokens_per_second": 50.0}))
+
+    calls = []
+
+    class FakeProc:
+        def terminate(self): pass
+        def wait(self, timeout=None): pass
+
+    def fake_run(cmd, check=True):
+        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        calls.append(out_path.name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps({"output_tokens_per_second": 99.0}))
+
+    monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
+    matrix = orchestrate.run_matrix(
+        arms=["baseline"], concurrencies=[1, 4],
+        results_dir=tmp_path, dry_run=False,
+        popen=lambda cmd: FakeProc(), run=fake_run,
+    )
+    # concurrency=1 was never re-run -- only concurrency=4 hit `run`
+    assert calls == ["guidellm_baseline_c4.json"]
+    assert matrix["results"]["baseline"]["concurrency"][1]["mean_output_tokens_per_sec"] == 50.0
+    assert matrix["results"]["baseline"]["concurrency"][4]["mean_output_tokens_per_sec"] == 99.0
+
+
+def test_run_matrix_skips_server_start_when_arm_fully_cached(tmp_path):
+    (tmp_path / "guidellm_baseline_c1.json").write_text(json.dumps({"output_tokens_per_second": 50.0}))
+
+    def boom_popen(cmd):
+        raise AssertionError("server should not be started when every point is already cached")
+
+    matrix = orchestrate.run_matrix(
+        arms=["baseline"], concurrencies=[1],
+        results_dir=tmp_path, dry_run=False,
+        popen=boom_popen, run=lambda *a, **k: (_ for _ in ()).throw(AssertionError("run should not be called")),
+    )
+    assert matrix["results"]["baseline"]["concurrency"][1]["mean_output_tokens_per_sec"] == 50.0
+
+
+def test_run_matrix_rereuns_point_with_corrupt_cached_file(tmp_path, monkeypatch):
+    corrupt = tmp_path / "guidellm_baseline_c1.json"
+    corrupt.write_text("not valid json {")
+
+    class FakeProc:
+        def terminate(self): pass
+        def wait(self, timeout=None): pass
+
+    def fake_run(cmd, check=True):
+        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        out_path.write_text(json.dumps({"output_tokens_per_second": 77.0}))
+
+    monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
+    matrix = orchestrate.run_matrix(
+        arms=["baseline"], concurrencies=[1],
+        results_dir=tmp_path, dry_run=False,
+        popen=lambda cmd: FakeProc(), run=fake_run,
+    )
+    assert matrix["results"]["baseline"]["concurrency"][1]["mean_output_tokens_per_sec"] == 77.0
+
+
+def test_run_matrix_checkpoints_aggregated_results_after_each_point(tmp_path, monkeypatch):
+    checkpoint = tmp_path / "checkpoint.json"
+    seen_at_second_call = {}
+
+    class FakeProc:
+        def terminate(self): pass
+        def wait(self, timeout=None): pass
+
+    def fake_run(cmd, check=True):
+        out_path = Path(cmd[cmd.index("--output-path") + 1])
+        if out_path.name == "guidellm_baseline_c4.json":
+            # by the time the second point runs, the checkpoint from the
+            # first point must already be on disk
+            seen_at_second_call.update(json.loads(checkpoint.read_text()))
+        out_path.write_text(json.dumps({"output_tokens_per_second": 10.0}))
+
+    monkeypatch.setattr(orchestrate, "wait_for_health", lambda *a, **k: True)
+    orchestrate.run_matrix(
+        arms=["baseline"], concurrencies=[1, 4],
+        results_dir=tmp_path, dry_run=False,
+        popen=lambda cmd: FakeProc(), run=fake_run,
+        checkpoint_path=checkpoint,
+    )
+    assert checkpoint.exists()
+    assert seen_at_second_call["results"]["baseline"]["concurrency"]["1"]["mean_output_tokens_per_sec"] == 10.0
+
+
 def test_run_matrix_respects_runtime_budget():
     ticks = iter([0, 0, 1000])  # deadline computed from first now(), blown by the third call
 
