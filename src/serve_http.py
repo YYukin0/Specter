@@ -91,6 +91,14 @@ SCENARIOS = {
                  "max_tokens": 160, "spec": True, "breaker": True, "compare": True,
                  "alpha_floor": 0.6, "warmup_rounds": 2, "reprobe_every": 4},
     },
+    "adaptive": {
+        "label": "goodput controller",
+        "caption": "Speculation length k is chosen every round from a calibrated "
+                   "round-time model (P7 Track C), not a fixed gamma — watch "
+                   "controller_k move as the batch fills.",
+        "body": {"demo_batch": True, "max_tokens": 128, "spec": True,
+                 "breaker": False, "compare": True, "controller": "goodput"},
+    },
 }
 DEFAULT_SCENARIO = "batch"
 
@@ -136,6 +144,8 @@ def run_stream(body: dict):
             alpha_floor=float(body.get("alpha_floor", 0.5)),
             warmup_rounds=int(body.get("warmup_rounds", 3)),
             reprobe_every=int(body.get("reprobe_every", 10)),
+            controller=str(body.get("controller", "alpha_floor")),
+            goodput_coeffs_path=str(ROOT / "results" / "p7_0_goodput_profile.json"),
             apply_chat_template=True,
         )
 
@@ -173,6 +183,7 @@ def run_stream(body: dict):
                 "n_active": info.n_active, "n_queued": info.n_queued,
                 "emitted": info.emitted, "wall_ms": round(info.wall_s * 1e3, 1),
                 "tok_per_s": round(tps, 2), "breaker": info.breaker_reason,
+                "controller_k": info.controller_k,
                 "texts": texts,
             }
         wall = time.perf_counter() - t0

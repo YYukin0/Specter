@@ -155,6 +155,20 @@ def test_concurrent_generate_gets_429(server):
         serve_http._GEN_LOCK.release()
 
 
+def test_goodput_controller_scenario_drains_headless(server):
+    # P7 Wrap: the "adaptive" scenario body (controller="goodput") must run to
+    # completion on the fake pair and surface a non-(-1) controller_k per round.
+    evs = _sse(server, {"demo_batch": True, "max_tokens": 32, "spec": True,
+                        "breaker": False, "controller": "goodput"})
+    kinds = [e for e, _ in evs]
+    assert kinds[0] == "start" and kinds[-1] == "done"
+    rounds = [d for e, d in evs if e == "round"]
+    assert rounds, "no rounds ran"
+    assert all("controller_k" in d for d in rounds)
+    assert any(d["controller_k"] >= 0 for d in rounds)
+    assert evs[-1][1]["total_tokens"] > 0
+
+
 def test_unknown_routes_404(server):
     for path in ("/nope", "/generate"):  # /generate is POST-only
         with pytest.raises(urllib.error.HTTPError) as ei:

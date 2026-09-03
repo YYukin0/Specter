@@ -21,6 +21,16 @@ def test_demo_runs_headless_and_drains():
     assert set(r.mode_counts) <= {"spec", "degraded", "probe", "idle"}
 
 
+def test_goodput_controller_drains_headless():
+    # P7 Wrap: --controller goodput runs to completion on the fake pair using the
+    # real calibrated coeffs file, same output shape as the default controller.
+    r = run_demo(spec=True, gammatune=False, breaker=False,
+                 controller="goodput", **FAKE)
+    assert len(r.texts) == 5
+    assert r.total_tokens > 0
+    assert set(r.mode_counts) <= {"spec", "degraded", "probe", "idle"}
+
+
 def test_no_spec_toggle_is_all_degraded():
     r = run_demo(spec=False, gammatune=False, breaker=False, **FAKE)
     assert set(r.mode_counts) <= {"degraded", "idle"}

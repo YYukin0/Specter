@@ -128,7 +128,10 @@ def _render(server: SpecServer, cfg: ServeConfig, label: str,
          f"circuit-breaker {_onoff(cfg.breaker_on)}"),
         "",
         (f"  round {last.index:<4d} mode {_mode_tag(last.mode):<20} "
-         f"gamma {last.round_gamma:<2d}  active {last.n_active}  queued {last.n_queued}"),
+         f"gamma {last.round_gamma:<2d}"
+         + (f"  k* {getattr(last, 'controller_k', -1):<2d}"
+            if cfg.controller == "goodput" else "")
+         + f"  active {last.n_active}  queued {last.n_queued}"),
         (f"  rolling alpha {last.rolling_alpha:4.2f}   "
          f"realign-tax {last.realignment_overhead:4.2f}   "
          f"agg {emitted_so_far / el if el else 0:6.1f} tok/s   "
@@ -161,6 +164,7 @@ class RoundInfoLike:
     rolling_alpha = 1.0
     realignment_overhead = 0.0
     breaker_reason = "starting"
+    controller_k = -1
 
 
 # ----------------------------------------------------------------------------- #
@@ -168,13 +172,16 @@ def run_demo(*, spec: bool = True, gammatune: bool = False, breaker: bool = True
              fake: bool = False, live: bool = True, max_active: int = 3,
              gamma: int = 4, max_new_tokens: int = 48, n_prompts: int = 6,
              frame_min_s: float = 0.0, out=sys.stdout, label: Optional[str] = None,
-             pair=None) -> DemoResult:
+             pair=None, controller: str = "alpha_floor") -> DemoResult:
     draft, target, tok, make_cache = pair or _load_pair(fake)
+    _root = Path(__file__).resolve().parent.parent.parent
     cfg = ServeConfig(
         gamma=gamma, temperature=1.0, max_new_tokens=max_new_tokens,
         max_active=max_active, make_cache=make_cache,
         spec_enabled=spec, gammatune_on=gammatune, breaker_on=breaker,
         alpha_floor=0.5, warmup_rounds=3, reprobe_every=12,
+        controller=controller,
+        goodput_coeffs_path=str(_root / "results" / "p7_0_goodput_profile.json"),
         apply_chat_template=True,   # FakeModel _Tok supports apply_chat_template
     )
     server = SpecServer(draft, target, tok, cfg)
@@ -243,6 +250,10 @@ def main(argv=None):
     ap.add_argument("--no-spec", action="store_true", help="speculation off")
     ap.add_argument("--gammatune", action="store_true", help="adaptive gamma on")
     ap.add_argument("--no-breaker", action="store_true", help="circuit breaker off")
+    ap.add_argument("--controller", choices=["alpha_floor", "goodput", "fixed"],
+                    default="alpha_floor",
+                    help="round-mode controller: alpha_floor breaker (default), "
+                         "goodput-model adaptive k, or fixed gamma")
     ap.add_argument("--fake", action="store_true", help="deterministic FakeModel, no download")
     ap.add_argument("--no-live", action="store_true", help="no ANSI redraw (headless)")
     ap.add_argument("--compare", action="store_true",
@@ -262,7 +273,8 @@ def main(argv=None):
                   frame_min_s=(1.0 / args.fps if args.fps else 0.0))
 
     main_run = run_demo(spec=not args.no_spec, gammatune=args.gammatune,
-                        breaker=not args.no_breaker, **common)
+                        breaker=not args.no_breaker, controller=args.controller,
+                        **common)
     print("\n" + bold("result"))
     print("  " + main_run.summary_line())
 

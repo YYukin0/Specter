@@ -61,8 +61,25 @@ caught it." Listed strongest-first; the file prefixes are build order.
    — a real vLLM + EAGLE3 run on a rented GPU: 2.36× at concurrency=1
    collapsing to 1.63× at concurrency=64, the same shape this repo's Mac-local
    parity result implies from the other end of the curve.
+10. [A goodput controller for speculation length, and why it loses on this pair](docs/engineering-notes/10-a-goodput-controller.md)
+   — a SmartSpec-style continuous `goodput(k)` controller with a hand-rolled
+   NNLS round-time fit. It's a **negative result**: the machinery is correct
+   (argmax tracks the model, hysteresis holds, `alpha=1` handled) but the
+   linear model over-charges for `k` on this dead-zone pair, so it trims
+   speculation it should keep and loses 4–7% throughput at width ≥ 2.
+11. [Block-structured KV accounting and exact-prefix reuse, without touching the kernel](docs/engineering-notes/11-block-kv-and-prefix-reuse.md)
+   — capacity-driven admission (6× the concurrency of a worst-case contiguous
+   reservation at the tightest KV budget, 0 `MemoryError`) and shared-prefix
+   KV reuse (87% of prefill skipped on a shared system prompt). The bug the
+   easy-shaped tests missed: reuse only fired when one whole prompt was a
+   prefix of another.
+12. [Fake-quantizing the target KV cache, and what it does to acceptance](docs/engineering-notes/12-fake-quant-kv-and-acceptance.md)
+   — a hand-rolled per-channel int-N quant/dequant on the target KV. 8-bit is
+   free (`alpha` unchanged); 4-bit is a cliff (`alpha` 0.80 → 0.35, accept
+   length below 1, diverges on the first token). Keeping V in fp16 buys back
+   nothing — the damage is in the keys.
 
-[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (Pitfall 1–29), the
+[**docs/pitfalls.md**](docs/pitfalls.md) — the full trap log (Pitfall 1–37), the
 build-time ones first.
 
 ---
@@ -123,6 +140,9 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Output-equivalent batched decoder | `src/spec_kv_batch.py` | done |
 | Continuous-batching serving loop + real-signal circuit breaker | `src/serving_loop.py`, `src/circuit_breaker.py` | done |
 | Adaptive-γ controller (GammaTune-style) | `src/gammatune.py` | done — **null result** on this pair (α ≈ 0.79, too little variance) |
+| Goodput-model speculation-length controller (SmartSpec-style, NNLS round-time fit) | `src/goodput_model.py`, `src/goodput_profile.py`, `src/verify_p7_1_goodput_controller.py` | done — **negative result**: correct machinery, −4…−7% throughput at width ≥ 2 ([note 10](docs/engineering-notes/10-a-goodput-controller.md)) |
+| Block-structured KV accounting + exact-prefix reuse (bookkeeping, not a paged kernel) | `src/kv_cache_manager.py`, `src/verify_p7_2_paging.py` | done — 6× admitted concurrency at the tightest KV budget, 87% of shared-prefix prefill skipped ([note 11](docs/engineering-notes/11-block-kv-and-prefix-reuse.md)) |
+| Fake-quant target KV cache × acceptance rate (hand-rolled, no quanto/hqq) | `src/kv_fakequant.py`, `src/verify_p7_3_kv_quant.py` | done — 8-bit free, 4-bit collapses acceptance ([note 12](docs/engineering-notes/12-fake-quant-kv-and-acceptance.md)) |
 | AWQ quantization, from scratch (activation stats → scaling → quantize → ppl) | `src/awq_*.py` | done |
 | Real int4 via mlx-lm (AWQ / RTN / GPTQ arms) | `src/verify_p6_2_real_int4.py` | done |
 | Downstream eval (GSM8K + IFEval via lm-eval-harness) of self-AWQ vs fp16 vs mlx int4 | `src/build_self_awq_hf.py`, `src/verify_p6_6_downstream_eval.py` | done |
@@ -133,7 +153,26 @@ Model pair throughout: draft `Qwen2.5-0.5B-Instruct`, target
 | Demo: self-contained lab page replaying a recorded real run (+ optional live stdlib HTTP/SSE backend) | `docs/site/index.html`, `src/serve_http.py` | done — open the HTML |
 | Cloud validation: vLLM + GuideLLM benchmark orchestration (subprocess-driven, hermetic-tested locally, executed for real on a rented GPU) | `src/cloud_bench/` | done — real run on a rented A40, `results/bullet2_vllm_eagle3.json` |
 
-251 tests (`pytest`). Result JSONs for every experiment in `results/`.
+304 tests (`pytest`). Result JSONs for every experiment in `results/`.
+
+### Adaptive serving layer
+
+Three config-gated additions to `src/serving_loop.py`, each defaulting to the
+existing behaviour:
+
+- **Goodput speculation-length control.** `ServeConfig.controller` picks
+  `k` per round to maximise accepted-tokens-per-wall-time, from an offline
+  hand-rolled NNLS fit of round time vs `(batch, KV length, k)`. On this pair it
+  loses to a fixed `gamma` by 4–7% — a negative result about the *model*, with
+  the controller machinery verified correct ([note 10](docs/engineering-notes/10-a-goodput-controller.md)).
+- **Capacity-driven admission.** `BlockKVPool` tracks KV in whole blocks and
+  admits by real free capacity instead of a hard `max_active`, running ~6× the
+  concurrency of a worst-case contiguous reservation at the tightest budget with
+  no `MemoryError` ([note 11](docs/engineering-notes/11-block-kv-and-prefix-reuse.md)).
+- **Exact-prefix KV reuse.** `PrefixStore` clones the KV of the longest common
+  leading token run and crops it to fit, skipping that prefill — 87% of prefill
+  work on a shared system prompt. No attention-kernel changes; the reused KV is
+  bit-identical to a from-scratch prefill.
 
 ---
 
@@ -200,6 +239,12 @@ result: [note 09](docs/engineering-notes/09-mac-vs-a40.md). Raw data:
 [`results/bullet2_vllm_eagle3.json`](results/bullet2_vllm_eagle3.json),
 [`results/cloud_bench_raw/`](results/cloud_bench_raw/).
 
+This A40 curve is also the qualitative shape-check for the goodput controller
+([note 10](docs/engineering-notes/10-a-goodput-controller.md)): more concurrency
+makes a marginal speculative token less worth it, so `k*` should shrink — the
+same direction EAGLE3's speedup moves. It's a shape match only; the artifact has
+no acceptance-rate field to check the magnitude against.
+
 ---
 
 ## Demo
@@ -255,11 +300,11 @@ python -m demo.live --compare            # or: python -m demo.live --fake   (no 
 src/            implementation + one verify_*.py driver per experiment
                 serve_http.py — the demo server (stdlib http.server + SSE)
                 cloud_bench/ — vLLM/GuideLLM orchestration for the rented-GPU run
-tests/          251 pytest tests (hermetic + model-gated)
+tests/          304 pytest tests (hermetic + model-gated)
 results/        one JSON per experiment, committed
 docs/
-  engineering-notes/   the 9 stories above
-  pitfalls.md          Pitfall 1–29
+  engineering-notes/   the 12 stories above
+  pitfalls.md          Pitfall 1–37
   site/                self-contained lab page + the recorded run it replays
 notes/          project plan (v9), literature reviews — Chinese, working notes
 papers/         reference index (PDFs not vendored; papers/download*.sh)
