@@ -22,7 +22,7 @@ import rejection_sampling as rs  # noqa: E402
 import spec_faultlib as fl  # noqa: E402
 import spec_kv as kv  # noqa: E402
 import spec_kv_batch as kvb  # noqa: E402
-from spec_oracles import run_o1, run_o3, run_o4, run_o5  # noqa: E402
+from spec_oracles import run_o1, run_o1_prefix, run_o3, run_o4, run_o5  # noqa: E402
 
 FAST = dict(gammas=(3,), seeds=(0, 1))
 FAST_O3 = dict(gammas=(3,), seeds=(0, 1, 2))
@@ -42,6 +42,12 @@ def test_clean_baseline_passes_all_oracles():
     assert not run_o3(**FAST_O3).killed
     assert not run_o4(**FAST).killed
     assert not run_o5(**FAST).killed
+
+
+def test_prefix_reuse_is_output_exact():
+    # P7 Track B: seeding a sequence's KV from a stored identical-prefix clone
+    # must not perturb a single output token vs prefilling from scratch.
+    assert not run_o1_prefix().killed
 
 
 @pytest.mark.parametrize("name", fl.names())

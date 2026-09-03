@@ -9,7 +9,90 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (Pitfalls 13–32; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30, 30–32 added 2026-09-04)
+## Found while building (Pitfalls 13–35; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30, 30–35 added 2026-09-04)
+
+### Pitfall 33 — "reuse a cached prompt" only fires when one prompt is a *whole* prefix of another
+**Where:** Pillar 8 Track B, `PrefixStore.longest_match` / `verify_p7_2_paging.py` exp2.
+
+The first cut of `longest_match` looked for a stored entry whose entire token
+list is a leading run of the incoming prompt (`tuple(token_ids[:n]) == e.token_ids`).
+That's the right check for "the same request retried" or "a continuation," and
+every hermetic test — which used exactly that shape (`BASE`, `BASE+"bbb"`,
+`BASE+"bbbccc"`) — passed. Then exp2's real workload, a shared ~300-token system
+prompt followed by 16 *different* user turns, reported `prefill_skip_ratio =
+0.000` for both `prefix_cache` on and off. Nothing matched: prompt *i* is
+`system + turn_i`, so no stored prompt is ever a whole prefix of a later one —
+they diverge right after the shared system run. The auto-generated
+`acceptance_note` even guessed a plausible-sounding wrong cause ("system prompt
+tokenised to a smaller fraction than expected"), which is the kind of number
+that gets written up unquestioned.
+
+**Fix:** `longest_match` now computes the **longest common leading run** between
+the query and each stored entry (token-by-token until first mismatch), gated by
+`min_prefix_tokens`. When the match is shorter than the stored entry, `seed`
+clones the stored cache and `crop`s it (relative `crop(-(n))`, the same call
+speculative rollback uses) down to `matched - 1` before handing it back. The
+whole-prefix case is just `matched == len(entry)`. Two new unit tests plus a
+serving-loop test with a shared leading run and four diverging tails
+(`test_prefix_reuse_on_shared_leading_run_not_whole_prompt`) pin it, and assert
+the output stays byte-identical to prefix-off.
+
+**Lesson:** a test corpus that only contains the easy shape of a feature will
+pass a broken implementation of the general shape. The exp2 workload is the one
+that mattered and it was the only thing that caught this. Also: an
+auto-generated "here's why the metric missed" note is a liability when the
+metric missed because of a bug — it launders the bug into a plausible finding.
+
+---
+
+### Pitfall 34 — a shared-prefix block must not be evictable while a live sequence is using it
+**Where:** Pillar 8 Track B, `BlockKVPool.pin_prefix` / `PrefixStore._evict_lru`.
+
+`PrefixStore` has an LRU cap (`max_entries`). The naive eviction — drop the
+least-recently-used entry and free its blocks — is a use-after-free: a sequence
+admitted from that prefix holds a *clone* of the KV, but the pool's block
+accounting would hand those same physical blocks to a new request while the old
+sequence is still decoding against them. On this per-sequence-cache design the
+clone makes it merely a bookkeeping inconsistency (`free_blocks()` goes wrong);
+on a real paged kernel sharing blocks it would be silent corruption.
+
+**Fix:** shared-prefix blocks are pinned with a refcount separate from
+per-request `_used` (`pin_prefix` / `unpin_prefix`). An entry's blocks return to
+the pool only when the refcount hits zero — i.e. the `PrefixStore` has evicted
+the entry *and* no live sequence was seeded from it. `_evict_lru` calls
+`unpin_prefix`; admission calls `pin_prefix` via `put`. Test:
+`test_evict_lru_drops_least_recently_used_and_unpins`.
+
+**Lesson:** any cache that hands out references to pooled memory needs the pool
+to refuse to reclaim a referenced slot, not just the cache to "usually" evict
+cold entries.
+
+---
+
+### Pitfall 35 — exact-prefix reuse rests on `copy.deepcopy` reproducing a `DynamicCache` bit-for-bit
+**Where:** Pillar 8 Track B, `kv_cache_manager.clone_dynamic_cache`.
+
+`PrefixStore` stores one KV prefix and every reuse hands out a `copy.deepcopy`
+of it. The correctness claim ("the seeded sequence emits the same tokens as a
+from-scratch prefill") is only as good as deepcopy faithfully cloning every
+per-layer key/value tensor, including dtype, device, and stride. `transformers`
+5.16.1's `DynamicCache` keeps its tensors in plain `.layers[i].keys/.values`
+instance attributes, so deepcopy works — but that's an implementation detail of
+this version, not a guarantee, and a future release that memoizes derived state
+(rotary tables, quantized side-buffers) on the cache object could make deepcopy
+either wrong or very slow.
+
+**Fix:** `test_clone_is_faithful` pins it directly — clone a populated cache,
+evolve the original and the clone through identical `update()` calls, assert the
+layer tensors stay `torch.equal` (a proxy for equal next-token logits). If a
+`transformers` bump breaks the assumption, this test goes red before anything
+ships.
+
+**Lesson:** when a feature's correctness depends on a library's internal object
+being trivially copyable, write the test that fails the day that stops being
+true — don't rely on noticing.
+
+---
 
 ### Pitfall 30 — `E[accepted tokens]` divides by zero exactly when speculation works best
 **Where:** Pillar 8 Track C, `goodput_model.expected_accepted_tokens`.

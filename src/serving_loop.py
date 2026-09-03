@@ -229,10 +229,10 @@ class SpecServer:
 
             self.pending.popleft()
             if entry is not None and self.prefix_store is not None:
-                d, t, ds, ts = self.prefix_store.seed(entry)
+                d, t, ds, ts = self.prefix_store.seed(entry, matched)
                 seq.draft_cache, seq.target_cache = d, t
                 seq.draft_synced, seq.target_synced = ds, ts
-                self.prefill_tokens_skipped += matched
+                self.prefill_tokens_skipped += max(0, matched - 1)
             if self.pool is not None:
                 self.pool.acquire(req_id, need)
             if self.prefix_store is not None:

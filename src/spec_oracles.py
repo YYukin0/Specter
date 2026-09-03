@@ -49,6 +49,7 @@ import spec_kv as _kv
 from rejection_sampling import encode_prompt
 from spec_kv import speculative_generate_kv, speculative_step_kv, target_only_generate_kv
 from spec_kv_batch import make_seq, run_round
+from kv_cache_manager import BlockKVPool, PrefixStore
 
 # NB: call `_rs.collect_eos_ids(...)` through the module, never a `from ... import`
 # binding -- the `eos_ignored_midblock` operator monkeypatches it on `_rs`, and a
@@ -199,6 +200,87 @@ def run_o1(mutants=(), *, gammas=(1, 3, 5), seeds=(0, 1, 2), eos=False,
                     firsts.append(d)
     return OracleResult(oracle="O1", killed=n_div > 0, n_runs=n_runs, n_diverged=n_div,
                         first_divergence_tokens=firsts)
+
+
+# --------------------------------------------------------------------------- #
+# O1-prefix -- exact leading-run KV reuse must not change any output token
+# --------------------------------------------------------------------------- #
+def _prefill_lengthonly(dcache, tcache, draft, target, committed, upto):
+    """Bring `dcache`/`tcache` to length `upto - 1` (rectangular invariant) by
+    one forward each over committed[:upto-1] -- the P7 Track B `_prefill_seq`
+    path, on the length-only fake."""
+    n = max(0, upto - 1)
+    if n == 0:
+        return
+    feed = torch.tensor([committed[:n]])
+    pos = torch.arange(0, n)
+    draft(input_ids=feed, past_key_values=dcache, use_cache=True, cache_position=pos)
+    target(input_ids=feed, past_key_values=tcache, use_cache=True, cache_position=pos)
+
+
+def _drive_from_caches(committed0, draft, target, tok, dcache, tcache, dsync, tsync,
+                       *, gamma, max_new_tokens, seed):
+    """The speculative_generate_kv while-loop, but starting from caller-supplied
+    caches + synced offsets (as PrefixStore.seed hands them back)."""
+    gen = torch.Generator()
+    gen.manual_seed(seed)
+    committed = list(committed0)
+    eos_ids = _rs.collect_eos_ids(tok, target)
+    out: List[int] = []
+    while len(out) < max_new_tokens:
+        g = min(gamma, max_new_tokens - len(out))
+        step = speculative_step_kv(committed, draft, target, dcache, tcache, dsync, tsync,
+                                   g, device=torch.device("cpu"), dtype=torch.long,
+                                   temperature=0.0, generator=gen)
+        dsync, tsync = step.draft_synced, step.target_synced
+        emitted = step.result.new_token_ids
+        hit = False
+        for j, tid in enumerate(emitted):
+            if tid in eos_ids:
+                emitted = emitted[: j + 1]
+                hit = True
+                break
+        out.extend(emitted)
+        committed.extend(emitted)
+        if hit:
+            break
+    return out
+
+
+def run_o1_prefix() -> OracleResult:
+    """Property: a sequence whose draft/target KV was seeded from a stored,
+    identical leading-run clone (P7 Track B PrefixStore) emits exactly the tokens
+    it would if prefilled from scratch. Any off-by-one in the clone / synced
+    bookkeeping (breaking the rectangular invariant) diverges here."""
+    draft, target, tok = make_fake_pair()
+    # both prompts encode (via _Tok) to the same leading token run, then differ
+    prompt_a = "prefix reuse continue: alpha"
+    ref = speculative_generate_kv(prompt_a, draft, target, tok, make_cache=LengthOnlyCache,
+                                  gamma=3, max_new_tokens=40, temperature=0.0, seed=0)
+
+    ctx = encode_prompt(tok, prompt_a, torch.device("cpu"), True)
+    committed0 = ctx[0].tolist()
+    prompt_len = len(committed0)
+
+    d0, t0 = LengthOnlyCache(), LengthOnlyCache()
+    _prefill_lengthonly(d0, t0, draft, target, committed0, prompt_len)
+
+    pool = BlockKVPool(total_blocks=64, block_size=16)
+    store = PrefixStore(pool, max_entries=4, min_prefix_tokens=3)
+    store.put(committed0[:prompt_len], d0, t0)
+    matched, entry = store.longest_match(committed0)
+    if entry is None or matched != prompt_len:
+        return OracleResult(oracle="O1-prefix", killed=True, n_runs=1, n_diverged=1,
+                            violations=[f"longest_match returned ({matched}, {entry})"])
+    sd, st, dsync, tsync = store.seed(entry)
+    got = _drive_from_caches(committed0, draft, target, tok, sd, st, dsync, tsync,
+                             gamma=3, max_new_tokens=40, seed=0)
+
+    d = _first_divergence(got, ref.token_ids, tol_tail=3)
+    killed = d is not None
+    return OracleResult(oracle="O1-prefix", killed=killed, n_runs=1, n_diverged=int(killed),
+                        first_divergence_tokens=[d] if d is not None else [],
+                        note="seeded-from-clone vs from-scratch prefill, token-exact")
 
 
 # --------------------------------------------------------------------------- #

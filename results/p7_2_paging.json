@@ -1,0 +1,104 @@
+{
+  "task": "P7.2 block-KV admission + exact-prefix reuse",
+  "scope_note": "bookkeeping + prefix KV clone only; attention kernel unchanged (see note 11)",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "device": "mps",
+  "dtype": "float16",
+  "exp1_admission": [
+    {
+      "total_blocks": 64,
+      "block_size": 16,
+      "worst_case_blocks_per_seq": 35,
+      "paged": {
+        "sustained_concurrency": 6,
+        "agg_tok_per_s": 19.757186006246393,
+        "wall_s": 78.19939537500613,
+        "mem_errors": 0
+      },
+      "contiguous": {
+        "max_active_equiv": 1,
+        "sustained_concurrency": 1,
+        "agg_tok_per_s": 19.820587728182584,
+        "wall_s": 77.949252624996
+      },
+      "concurrency_ratio": 6.0
+    },
+    {
+      "total_blocks": 128,
+      "block_size": 16,
+      "worst_case_blocks_per_seq": 35,
+      "paged": {
+        "sustained_concurrency": 11,
+        "agg_tok_per_s": 20.251029998349644,
+        "wall_s": 76.29241575000924,
+        "mem_errors": 0
+      },
+      "contiguous": {
+        "max_active_equiv": 3,
+        "sustained_concurrency": 3,
+        "agg_tok_per_s": 20.25553909594612,
+        "wall_s": 76.27543224999681
+      },
+      "concurrency_ratio": 3.6666666666666665
+    },
+    {
+      "total_blocks": 256,
+      "block_size": 16,
+      "worst_case_blocks_per_seq": 35,
+      "paged": {
+        "sustained_concurrency": 17,
+        "agg_tok_per_s": 19.098982841817588,
+        "wall_s": 80.89436033301172,
+        "mem_errors": 0
+      },
+      "contiguous": {
+        "max_active_equiv": 7,
+        "sustained_concurrency": 7,
+        "agg_tok_per_s": 18.907412247428194,
+        "wall_s": 81.71398495900212
+      },
+      "concurrency_ratio": 2.4285714285714284
+    },
+    {
+      "total_blocks": 512,
+      "block_size": 16,
+      "worst_case_blocks_per_seq": 35,
+      "paged": {
+        "sustained_concurrency": 29,
+        "agg_tok_per_s": 19.029350109048593,
+        "wall_s": 81.19037125000614,
+        "mem_errors": 0
+      },
+      "contiguous": {
+        "max_active_equiv": 14,
+        "sustained_concurrency": 14,
+        "agg_tok_per_s": 20.426780999253467,
+        "wall_s": 75.63599962502485
+      },
+      "concurrency_ratio": 2.0714285714285716
+    }
+  ],
+  "exp2_prefix": [
+    {
+      "prefix_cache": false,
+      "prefill_tokens_total": 6090,
+      "prefill_skip_ratio": 0.0,
+      "agg_tok_per_s": 18.067496784790332,
+      "mean_queue_wait_rounds": 7.4375
+    },
+    {
+      "prefix_cache": true,
+      "prefill_tokens_total": 6090,
+      "prefill_skip_ratio": 0.8733990147783252,
+      "agg_tok_per_s": 20.519047950086733,
+      "mean_queue_wait_rounds": 7.6875
+    }
+  ],
+  "acceptance": {
+    "exp1_tightest_ratio": 6.0,
+    "exp2_skip_ratio": 0.8733990147783252
+  },
+  "acceptance_note": "both targets met: exp1 tightest-budget concurrency_ratio=6.00 (>= 1.5, no MemoryError at any budget); exp2 prefill_skip_ratio=0.87 (>= 0.40) with prefix reuse on the shared system prompt. Per-sequence caches mean agg tok/s is roughly flat paged-vs-contiguous; the win is admitted concurrency and skipped prefill, not kernel throughput.",
+  "elapsed_s_total": 713.3047583340085
+}
