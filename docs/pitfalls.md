@@ -9,7 +9,78 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (Pitfalls 13–29; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30)
+## Found while building (Pitfalls 13–32; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30, 30–32 added 2026-09-04)
+
+### Pitfall 30 — `E[accepted tokens]` divides by zero exactly when speculation works best
+**Where:** Pillar 8 Track C, `goodput_model.expected_accepted_tokens`.
+
+Leviathan et al.'s closed form for the expected number of accepted tokens in a
+speculative block of length `k` is `(1 - alpha^(k+1)) / (1 - alpha)`. It is
+perfectly well-behaved for every acceptance rate the model will ever see in
+practice — except the limit. As `alpha -> 1` (the draft agreeing with the
+target on everything), both numerator and denominator go to zero; the true
+limit is `k + 1` (every drafted token plus the bonus). A naive port of the
+formula `nan`s at `alpha == 1.0` and, worse, produces wildly wrong huge values
+for `alpha = 0.999` if you clamp instead of taking the limit — i.e. it breaks
+in the regime where the controller most wants a trustworthy number, because a
+near-perfect draft is exactly when you want to crank `k` up.
+
+**Fix:** explicit branch — `alpha >= 1 - 1e-9 -> k + 1`; `alpha <= 1e-12 -> 1.0`;
+closed form otherwise. `k <= 0 -> 1.0` (the one guaranteed target token) is a
+separate early return. `tests/test_goodput_curve.py` pins all four regimes plus
+monotonicity in `alpha` and `k`.
+
+**Lesson:** when a formula has a removable singularity, the singular point is
+often the operating point you care about, not an edge case to guard against.
+Code the limit, don't clamp around it.
+
+---
+
+### Pitfall 31 — a per-round argmax controller chatters without a hysteresis clamp
+**Where:** Pillar 8 Track C, `goodput_model.best_k` / `serving_loop` integration.
+
+`best_k` scans `k in [0, 8]` and returns the goodput argmax every round. Goodput
+as a function of `k` on this pair is *nearly flat* near its peak (the accepted-
+tokens term saturates fast at `alpha ~= 0.77`), so the argmax hops between
+adjacent `k` values on rounding noise in the rolling-alpha estimate — `k` going
+`3, 2, 3, 1, 2, ...` round to round. That's not just ugly telemetry: each change
+of `k` shifts how many draft forwards run and resyncs `cfg.gamma`, adding
+variance to exactly the round-time signal the controller is trying to optimize.
+
+**Fix:** `best_k(prev_k=, hysteresis=2)` clamps the new choice to
+`[prev_k - 2, prev_k + 2]`. The controller can still move a lot over a few
+rounds when the workload genuinely shifts, but can't oscillate. Two hermetic
+tests pin the clamp in both directions.
+
+**Lesson:** any controller that takes an argmax over a flat-topped objective
+every tick needs rate-limiting on the output, not just smoothing on the input.
+
+---
+
+### Pitfall 32 — the cloud run can't cross-validate the controller: no acceptance rate in the artifact
+**Where:** Pillar 8 Track C write-up (note 10) vs. Bullet 2's
+`results/bullet2_vllm_eagle3.json`.
+
+The goodput controller's round-time model predicts `k*` should shrink as
+concurrency rises, and note 09's A40 data shows EAGLE3's speedup collapsing
+from 2.4x to 1.6x between concurrency 16 and 64 — the same direction, and it was
+tempting to write that up as "the Mac controller's behaviour is validated by
+the cloud run." It isn't. `guidellm`'s output (and therefore the normalized
+`bullet2_vllm_eagle3.json`) has **no mean acceptance rate field** — the one
+number you'd need to plug the A40's `alpha` into `goodput_model` and check
+whether it predicts the observed `k*`/speedup. Without it, the agreement is a
+qualitative shape match between two independent observations, not a
+quantitative check of one against the other.
+
+**Fix:** note 10 and `p7_1_goodput_controller.json`'s `a40_shape_check` field
+both say "shape match only, `mean_acceptance_rate` is null" in as many words.
+No stronger claim is made.
+
+**Lesson:** before leaning on run B to validate model A, check that run B
+actually recorded the quantity model A is parameterized on. A speedup number
+is a downstream effect of acceptance rate, not a substitute for it.
+
+---
 
 ### Pitfall 29 — vLLM's V1 engine flatly refuses draft-model speculative decoding
 **Where:** Bullet 2 (Pillar 7), full arm × concurrency matrix on the rented A40.

@@ -122,4 +122,15 @@
 
 ---
 
+## 支柱8 — 自适应 serving 层（方向 B 追加，Mac 本地，$0）
+
+> 2026-09-04 执行。完整规格见 [`notes/自适应serving层执行计划-支柱8_2026-09-03.md`](notes/自适应serving层执行计划-支柱8_2026-09-03.md)（零歧义执行版，此处只打勾）。模型对不动（Qwen2.5-0.5B/1.5B）、不装新依赖、所有新能力 config 门控默认关、hermetic 套件（`-k "not model..."`）始终绿、commit 直推 `main`。
+
+- [x] **Track C — goodput-model 自适应 speculation 长度控制器** —— DONE（负结果）。`src/goodput_model.py`（纯函数：`expected_accepted_tokens` Leviathan 闭式 + α→1 取极限 `k+1`（坑30）；线性 `expected_round_time`；`goodput(k)=E[accepted]/E[round_time]`；`best_k` 带 hysteresis 限幅（坑31）、`k*=0` = 关投机）。`src/goodput_profile.py`：真 Qwen 对离线标定，72 cell 网格（n_active×regime×k），**手写 NNLS**（active-set，numpy 无 NNLS / scipy 非依赖）——OLS 首次给 `c3=-0.0355`（draft 项负、无意义），根因是矩形不变量把 `mean_pending` 钉死在 1.0 → `n*(mp+k)` 与 `n*k` 共线、c1/c3 不可分辨；NNLS 把 c3 钉 0、c1=0.0235 s/token 吸收合并的 per-spec-token 成本，held-out R²=0.920 / MAPE 0.177（`--refit` 从 raw_samples 免重测重拟合）。`results/p7_0_goodput_profile.json` 的 `acceptance_note` 如实记共线性。`serving_loop.py`：`ServeConfig.controller ∈ {alpha_floor(默认), goodput, fixed}`，goodput 分支替换 α-floor 决策、每轮 `best_k` 定 k，`RoundInfo.controller_k`。默认路径逐字节不变。`src/verify_p7_1_goodput_controller.py`（3 非平稳流 × 4 并发宽 × 3 控制器 + load ramp，24 min MPS，`--rescore` 免重测重算验收）→ `results/p7_1_goodput_controller.json`。**结果 = 负结果**：控制器把 k 收到 mean~1.6–2.5（vs fixed gamma=3），width≥2 时 agg tok/s 比更好的基线低 7/9 cell、均值 −4% / 最差 −7%，width=1 打平。**机制是对的**（k* 追 round-time 模型 argmax、hysteresis 不抖、α=1 处理、load ramp 下 k* 确实随并发收缩 k_mean=1.80、无 run 失败），但**模型的最优 ≠ 吞吐最优**：c1 线性罚 k、E[accepted] 在 α≈0.77 早饱和 → goodput 比值峰在小 k；而这台 Mac 上一次 batched target 前向多验 k=3 vs k=1 几乎免费（坑4 dead zone），模型高估了 k 的代价。对 A40（note 09）只做**定性形状核对**（并发↑→k*↓ 同向），`bullet2_vllm_eagle3.json` 的 `mean_acceptance_rate` 是 null、无法定量交叉验证（坑32）。write-up = `docs/engineering-notes/10-a-goodput-controller.md`；坑30（α=1 除零）/ 坑31（argmax 抖动需限幅）/ 坑32（云端 artifact 无 α、不能反验控制器）。测试：`tests/test_goodput_curve.py`（16）+ `test_goodput_profile.py`（3）+ `test_serving_loop_goodput.py`（3），hermetic 218→239。
+- [ ] **Track B — block 结构 KV 记账 + exact-prefix 复用**（不换 attention kernel）。`src/kv_cache_manager.py`（`BlockKVPool` + `PrefixStore`）、`serving_loop` 显存驱动准入、`src/verify_p7_2_paging.py` → `results/p7_2_paging.json`、`docs/engineering-notes/11-block-kv-and-prefix-reuse.md`、坑33–35。
+- [ ] **Track E — 手写 fake-quant target KV cache × 接受率交互**。`src/kv_fakequant.py`（`FakeQuantKVCache` 子类化 `DynamicCache`）、`src/longctx_prompts.py`、`src/verify_p7_3_kv_quant.py` → `results/p7_3_kv_quant.json`、`docs/engineering-notes/12-fake-quant-kv-and-acceptance.md`、坑36–37。
+- [ ] **Wrap — demo 控制器切换 + README/TASKS/memory 更新**。`serve_http.py`/`demo/live.py` 加 `controller` 开关（已接：`SCENARIOS["adaptive"]` + `--controller`）、README `## Serving loop` 小节、memory 更新。
+
+---
+
 详细依据、任务级依赖分析、并行窗口表、里程碑验收标准见 [`notes/two_developer_plan_v2.md`](notes/two_developer_plan_v2.md)。此文件只负责"打勾"，不重复论证——如果某条任务的归属或顺序需要改，先改那份文档，再回来同步这里。

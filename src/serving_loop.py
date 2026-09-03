@@ -73,6 +73,19 @@ class ServeConfig:
     reprobe_every: int = 20            # while degraded, force a spec probe this often
     latency_probe_every: int = 0      # >0: run a target-only latency probe every N rounds
     latency_slack: float = 1.10       # spec round may be up to this x the target-only estimate
+    # P7 Track C -- adaptive speculation-length controller (default = old behavior)
+    controller: str = "alpha_floor"    # "alpha_floor" | "goodput" | "fixed"
+    goodput_coeffs_path: str = "results/p7_0_goodput_profile.json"
+    goodput_coeffs: object = None      # injectable RoundTimeCoeffs for hermetic tests; overrides path
+    k_min: int = 0
+    k_max: int = 8
+    controller_hysteresis: int = 2
+    controller_warmup: int = 4
+    # P7 Track B -- block-structured KV accounting + exact-prefix reuse (default off)
+    kv_total_blocks: int = 0           # 0 -> pool disabled (current behavior)
+    kv_block_size: int = 16
+    prefix_cache: bool = False         # requires kv_total_blocks > 0
+    prefix_cache_max_entries: int = 32
 
 
 @dataclass
@@ -109,6 +122,7 @@ class RoundInfo:
     wall_s: float
     breaker_reason: str
     round_gamma: int = 0               # gamma used this round (moves when gammatune_on)
+    controller_k: int = -1             # goodput controller's k* this round (-1 = not the goodput controller)
 
 
 # --------------------------------------------------------------------------- #
@@ -145,6 +159,27 @@ class SpecServer:
         self.round_log: List[RoundInfo] = []
         self.telemetry: List[RoundTelemetry] = []
 
+        # P7 Track C -- goodput controller state
+        self._controller_coeffs = None
+        self._last_k = self.cfg.gamma
+        if self.cfg.controller == "goodput":
+            from goodput_model import RoundTimeCoeffs
+            self._controller_coeffs = (
+                self.cfg.goodput_coeffs
+                or RoundTimeCoeffs.from_json(self.cfg.goodput_coeffs_path)
+            )
+
+        # P7 Track B -- block KV pool + exact-prefix store (both default-disabled)
+        self.pool = None
+        self.prefix_store = None
+        if self.cfg.kv_total_blocks > 0:
+            from kv_cache_manager import BlockKVPool, PrefixStore
+            self.pool = BlockKVPool(self.cfg.kv_total_blocks, self.cfg.kv_block_size)
+            if self.cfg.prefix_cache:
+                self.prefix_store = PrefixStore(self.pool, self.cfg.prefix_cache_max_entries)
+        self.prefill_tokens_total = 0
+        self.prefill_tokens_skipped = 0
+
     # ------------------------------------------------------------------ #
     def submit(self, prompt: str, *, req_id: Optional[str] = None,
                seed: Optional[int] = None, max_new_tokens: Optional[int] = None) -> str:
@@ -163,17 +198,78 @@ class SpecServer:
     # ------------------------------------------------------------------ #
     def _admit(self) -> List[str]:
         admitted: List[str] = []
+        if self.pool is None and self.prefix_store is None:
+            # unchanged pre-P7 path
+            while self.pending and len(self.active) < self.cfg.max_active:
+                req_id, prompt, mnt, seed = self.pending.popleft()
+                seq = make_seq(req_id, prompt, self.tok, device=self.device,
+                               max_new_tokens=mnt, seed=seed,
+                               apply_chat_template=self.cfg.apply_chat_template,
+                               make_cache=self.cfg.make_cache)
+                seq.submit_round = getattr(seq, "submit_round", 0)
+                seq.admit_round = self.round_index
+                self.active.append(seq)
+                admitted.append(req_id)
+            return admitted
+
+        # P7 Track B: capacity-driven admission + exact-prefix reuse
         while self.pending and len(self.active) < self.cfg.max_active:
-            req_id, prompt, mnt, seed = self.pending.popleft()
+            req_id, prompt, mnt, seed = self.pending[0]
             seq = make_seq(req_id, prompt, self.tok, device=self.device,
                            max_new_tokens=mnt, seed=seed,
                            apply_chat_template=self.cfg.apply_chat_template,
                            make_cache=self.cfg.make_cache)
+            prompt_len = len(seq.committed)
+            matched, entry = (0, None)
+            if self.prefix_store is not None:
+                matched, entry = self.prefix_store.longest_match(seq.committed)
+            need = prompt_len - matched
+            if self.pool is not None and not self.pool.can_admit(need):
+                break                              # leave queued; retry next step
+
+            self.pending.popleft()
+            if entry is not None and self.prefix_store is not None:
+                d, t, ds, ts = self.prefix_store.seed(entry)
+                seq.draft_cache, seq.target_cache = d, t
+                seq.draft_synced, seq.target_synced = ds, ts
+                self.prefill_tokens_skipped += matched
+            if self.pool is not None:
+                self.pool.acquire(req_id, need)
+            if self.prefix_store is not None:
+                self._prefill_seq(seq, prompt_len)
+                if entry is None:
+                    self.prefix_store.put(list(seq.committed[:prompt_len]),
+                                          seq.draft_cache, seq.target_cache)
+            self.prefill_tokens_total += prompt_len
             seq.submit_round = getattr(seq, "submit_round", 0)
             seq.admit_round = self.round_index
             self.active.append(seq)
             admitted.append(req_id)
         return admitted
+
+    @property
+    def prefill_skip_ratio(self) -> float:
+        return self.prefill_tokens_skipped / max(1, self.prefill_tokens_total)
+
+    @torch.no_grad()
+    def _prefill_seq(self, seq, upto: int) -> None:
+        """Bring `seq`'s draft/target caches to length `upto - 1` (rectangular
+        invariant -- the last prompt token stays as round 1's pending input).
+        One forward each over the not-yet-cached slice."""
+        lo = seq.target_synced
+        hi = upto - 1
+        if hi <= lo:
+            seq.draft_synced = seq.target_synced = max(lo, hi)
+            return
+        chunk = seq.committed[lo:hi]
+        feed = torch.tensor([chunk], device=self.device, dtype=self.dtype)
+        pos = _cache_position(lo, len(chunk), self.device)
+        self.draft(input_ids=feed, past_key_values=seq.draft_cache,
+                   use_cache=True, cache_position=pos)
+        self.target(input_ids=feed, past_key_values=seq.target_cache,
+                    use_cache=True, cache_position=pos)
+        seq.draft_synced = hi
+        seq.target_synced = hi
 
     # ------------------------------------------------------------------ #
     def _rolling_alpha(self) -> float:
@@ -195,8 +291,8 @@ class SpecServer:
         cfg = self.cfg
         if not cfg.spec_enabled:
             return "degraded", "speculation disabled (demo toggle)"
-        if not cfg.breaker_on:
-            return "spec", "breaker off"
+        if not cfg.breaker_on or cfg.controller == "fixed":
+            return "spec", "fixed / breaker off"
 
         alpha = self._rolling_alpha()
         if self.mode == "spec":
@@ -251,9 +347,34 @@ class SpecServer:
         if self.cfg.latency_probe_every and self.round_index % self.cfg.latency_probe_every == 0:
             self._latency_probe()
 
-        round_mode, reason = self._decide_mode()
-        exec_mode = "degraded" if round_mode == "degraded" else "spec"
-        round_gamma = self.cfg.gamma
+        if (self.cfg.controller == "goodput"
+                and self._spec_rounds_seen >= self.cfg.controller_warmup
+                and self.active):
+            from goodput_model import best_k
+            alpha = self._rolling_alpha()
+            n = len(self.active)
+            mean_pending = sum(len(s.committed) - s.target_synced for s in self.active) / n
+            mean_kv = sum(s.target_synced for s in self.active) / n
+            k_star, _ = best_k(
+                self._controller_coeffs, alpha=alpha, n_active=n,
+                mean_pending=mean_pending, mean_kv_len=mean_kv,
+                k_min=self.cfg.k_min, k_max=self.cfg.k_max,
+                prev_k=self._last_k, hysteresis=self.cfg.controller_hysteresis,
+            )
+            self._last_k = k_star
+            self.cfg.gamma = max(1, k_star)          # gamma>=1 for the actual round call
+            if k_star == 0:
+                round_mode, reason, exec_mode = (
+                    "degraded", "goodput: k*=0 (spec not worth it)", "degraded")
+                round_gamma = 1
+            else:
+                round_mode, reason, exec_mode = (
+                    "spec", f"goodput: k*={k_star} (alpha={alpha:.2f}, n={n})", "spec")
+                round_gamma = k_star
+        else:
+            round_mode, reason = self._decide_mode()
+            exec_mode = "degraded" if round_mode == "degraded" else "spec"
+            round_gamma = self.cfg.gamma
 
         tele = run_round(self.active, self.draft, self.target, gamma=round_gamma,
                          temperature=self.cfg.temperature, eos_ids=self.eos_ids,
@@ -294,6 +415,8 @@ class SpecServer:
                     eos_hit=s.eos_hit, submit_round=s.submit_round, admit_round=s.admit_round,
                     finish_round=self.round_index,
                 )
+                if self.pool is not None:
+                    self.pool.release(s.req_id)
                 self.active.remove(s)
 
         info = RoundInfo(
@@ -302,6 +425,7 @@ class SpecServer:
             rolling_alpha=self._rolling_alpha(), realignment_overhead=tele.realignment_overhead,
             emitted=sum(tele.emitted_per_seq), wall_s=tele.wall_s, breaker_reason=reason,
             round_gamma=round_gamma,
+            controller_k=(self._last_k if self.cfg.controller == "goodput" else -1),
         )
         self.round_log.append(info)
         self.round_index += 1
