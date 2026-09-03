@@ -299,11 +299,14 @@ def speculative_generate_kv(
     injection: Optional[Injection] = None,
     apply_chat_template: bool = True,
     make_cache=_new_cache,
+    make_draft_cache=None,
 ) -> KVGenResult:
     """KV-cached speculative decoding. Token-for-token identical to
     `speculative_generate` at the same seed (FakeModel; long-common-prefix on
     real MPS fp16). `make_cache` is injectable so tests can pass a length-only
-    fake cache.
+    fake cache. `make_draft_cache` (default: same as `make_cache`) lets the draft
+    use a different cache type than the target -- P7 Track E fake-quants only the
+    target KV, leaving the draft in fp16.
     """
     if injection is None:
         injection = Injection()
@@ -316,7 +319,7 @@ def speculative_generate_kv(
     dtype = context.dtype
 
     eos_ids = collect_eos_ids(tokenizer, target_model)
-    draft_cache = make_cache()
+    draft_cache = (make_draft_cache or make_cache)()
     target_cache = make_cache()
     draft_synced = 0
     target_synced = 0

@@ -1,0 +1,77 @@
+{
+  "task": "P7.3 fake-quant target KV cache x acceptance rate",
+  "draft_model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "target_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "device": "mps",
+  "dtype": "float16",
+  "gamma": 3,
+  "max_new_tokens": 48,
+  "residual_len": 64,
+  "drift_positions": 32,
+  "baseline_arm": "(16, kv)",
+  "arms": [
+    {
+      "nbits": 16,
+      "kv": "kv",
+      "alpha_mean": 0.8017574530732425,
+      "accept_len_mean": 1.9711035401002506,
+      "tok_per_s_mean": 14.721559499971367,
+      "kl_mean": 0.0,
+      "kl_p90": 0.0,
+      "quality_exact_prefix_ratio": 1.0,
+      "n_prompts": 8,
+      "alpha_delta": 0.0
+    },
+    {
+      "nbits": 8,
+      "kv": "kv",
+      "alpha_mean": 0.8017574530732425,
+      "accept_len_mean": 1.9711035401002506,
+      "tok_per_s_mean": 14.409565434743534,
+      "kl_mean": 0.00018450921287477273,
+      "kl_p90": 0.0004008798219729215,
+      "quality_exact_prefix_ratio": 0.9921875,
+      "n_prompts": 8,
+      "alpha_delta": 0.0
+    },
+    {
+      "nbits": 4,
+      "kv": "kv",
+      "alpha_mean": 0.41100246795972223,
+      "accept_len_mean": 0.7572172619047619,
+      "tok_per_s_mean": 8.554679465035505,
+      "kl_mean": 10.34098950689215,
+      "kl_p90": 14.44368543624878,
+      "quality_exact_prefix_ratio": 0.0,
+      "n_prompts": 8,
+      "alpha_delta": -0.3907549851135203
+    },
+    {
+      "nbits": 8,
+      "kv": "k_only",
+      "alpha_mean": 0.8017574530732425,
+      "accept_len_mean": 1.9711035401002506,
+      "tok_per_s_mean": 14.294503177720376,
+      "kl_mean": 0.00012655905634572577,
+      "kl_p90": 0.00033350351732224225,
+      "quality_exact_prefix_ratio": 1.0,
+      "n_prompts": 8,
+      "alpha_delta": 0.0
+    },
+    {
+      "nbits": 4,
+      "kv": "k_only",
+      "alpha_mean": 0.3290376514825719,
+      "accept_len_mean": 0.7054976851851852,
+      "tok_per_s_mean": 6.324885997605155,
+      "kl_mean": 10.512813974142311,
+      "kl_p90": 14.5614577293396,
+      "quality_exact_prefix_ratio": 0.0,
+      "n_prompts": 8,
+      "alpha_delta": -0.4727198015906706
+    }
+  ],
+  "status": "complete",
+  "acceptance_note": "fake-quant simulates int-N numerical error on the target KV; it does not pack bytes and saves no memory (echoes note 05's real-int4 caveat). Direction of alpha_delta is reported as measured, not assumed. Single machine, greedy, 48 new tokens, long context is concatenated filler rather than natural long text.",
+  "elapsed_s_total": 386.35366754201823
+}

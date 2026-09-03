@@ -9,7 +9,60 @@ Each entry: what it was, why it was easy to get wrong, what was done about it.
 
 ---
 
-## Found while building (Pitfalls 13–35; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30, 30–35 added 2026-09-04)
+## Found while building (Pitfalls 13–37; 13–21 added 2026-08-28, 22–26 added 2026-08-29, 27–29 added 2026-08-30, 30–37 added 2026-09-04)
+
+### Pitfall 36 — a `DynamicCache` subclass reaches into per-layer attributes that a `transformers` bump can rename
+**Where:** Pillar 8 Track E, `kv_fakequant.FakeQuantKVCache.update`.
+
+To fake-quant the frozen part of the cache in place, `update()` writes
+`self.layers[layer_idx].keys[..., :cut, :]` and `.values[..., :cut, :]`. Those
+attribute names are a `transformers` 5.16.1 implementation detail. Older
+`transformers` stored KV as `self.key_cache` / `self.value_cache` *lists on the
+cache object* (no `.layers` at all); a future version could move them again, or
+make them properties without a setter, at which point the in-place quant write
+either `AttributeError`s or silently no-ops (quant applied to a throwaway view).
+The `nbits >= 16` passthrough would still pass every test, so a silent no-op
+here looks exactly like "quantization has no effect," which is also a plausible
+*finding*.
+
+**Fix:** the plan calls for a start-of-work probe
+(`[a for a in dir(DynamicLayer) if 'key' in a.lower() or 'val' in a.lower()]`)
+and `test_kv_fakequant.py::test_only_the_pre_residual_region_is_quantized`
+asserts the frozen region's values actually changed and the residual window's
+did not — so a rename that breaks the write turns that test red rather than
+producing a fake null result.
+
+**Lesson:** when you subclass a library container to mutate its internals,
+pin "the mutation happened" with a test, not just "the output looks right" —
+the two diverge precisely when the internals move.
+
+---
+
+### Pitfall 37 — fake-quant measures the error model, not the int-N cache; and re-quant-on-rollback is a trap you can design out
+**Where:** Pillar 8 Track E, `kv_fakequant` residual window + note 12 framing.
+
+Two related traps. First, calibration: `FakeQuantKVCache` round-trips KV through
+int-N quant → dequant but stores fp16 and packs nothing. It reproduces the
+*arithmetic error* a real int4 KV carries into attention — which is what moves
+`alpha` — but none of the systems properties (memory, bandwidth, a real dequant
+kernel's group layout and rounding). Reporting an `alpha_delta` from this as if
+it were "int4 KV costs X acceptance" overclaims; it's "int4-magnitude KV *error*
+costs X." Second, rollback: if quantization chased the write head, a speculative
+`crop(-g)` could land mid-block and force a requantize of a partially-rolled-back
+region against a changed scale — a correctness hazard and a perf cliff.
+
+**Fix:** a full-precision `residual_len = 64` window (>> `gamma <= 8`) at the
+tail. Quantization only ever touches positions `[:seq - 64]`; rollback only ever
+touches the last few. They can't overlap, so `crop()` is inherited unchanged and
+never sees quantized data. Note 12 states the fake-quant-vs-real-int4 caliber
+gap in as many words, echoing note 05's identical caveat.
+
+**Lesson:** when simulating a lossy representation, name exactly which of its
+properties you're modelling (here: error, not memory) — and if a hazard only
+exists in the overlap of two regions, size the regions so they can't overlap
+instead of handling the overlap.
+
+---
 
 ### Pitfall 33 — "reuse a cached prompt" only fires when one prompt is a *whole* prefix of another
 **Where:** Pillar 8 Track B, `PrefixStore.longest_match` / `verify_p7_2_paging.py` exp2.
